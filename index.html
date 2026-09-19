@@ -60,15 +60,6 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
 }
 </style>
 
-
-<link rel="manifest" href="./manifest.webmanifest">
-<meta name="theme-color" content="#2b211d">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Cartera 24">
-<link rel="apple-touch-icon" href="./icon-192.png">
-
 </head>
 <body>
 <div id="loading" class="loading">Cargando Cartera 24…</div>
@@ -522,7 +513,16 @@ function printReport(){
  h2{font-size:14px;margin:18px 0 7px}table{width:100%;border-collapse:collapse;margin-bottom:12px}th{background:#f1e3d6;text-align:left;padding:7px;border-bottom:1px solid #cdb7a6}td{padding:7px;border-bottom:1px solid #e7ddd5}.num{text-align:right}.note{margin-top:14px;padding:9px;background:#f7efe8;border-radius:7px;color:#665850}.empty{text-align:center;color:#75675f}
  .actions{margin:18px 0}.actions button{padding:10px 16px;font-weight:700}.footer{margin-top:20px;border-top:1px solid #ddd;padding-top:8px;font-size:9px;color:#8a7b72}
  @media print{.actions{display:none}h2{break-after:avoid}table{break-inside:auto}tr{break-inside:avoid}}
- </style></head><body>
+ </style>
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#2b211d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cartera 24">
+<link rel="apple-touch-icon" href="./icon-192.png">
+
+</head><body>
  <div class="head"><div class="brand">Cartera 24</div><div class="title">Reporte financiero y de cartera</div><div class="muted">Período: ${periodLabel(r.from,r.to)} · Generado ${new Intl.DateTimeFormat('es-CR',{dateStyle:'long',timeStyle:'short'}).format(new Date())}</div></div>
  <div class="summary">
   <div class="box"><span>Préstamos colocados</span><b>${money(r.placed)}</b></div>
@@ -540,17 +540,7 @@ function printReport(){
  <div class="footer">Cartera 24 · Desarrollado por LillyTech · 3RS Integrated Solutions</div>
  <div class="actions"><button onclick="window.print()">Guardar como PDF / Imprimir</button></div>
  <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script>
- 
-<script>
-if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./service-worker.js').catch(console.error);
-  });
-}
-window.addEventListener('offline',()=>console.info('Cartera 24: sin conexión. Los datos nuevos requieren internet.'));
-</script>
-
-</body></html>`);
+ </body></html>`);
  w.document.close();
 }
 function renderAdmin(){if(!['owner','admin'].includes(role))return;
@@ -614,4 +604,14 @@ function go(id,btn){document.querySelectorAll('.view').forEach(v=>v.classList.re
 function closeModal(){modal.classList.remove('show')}
 init();
 </script>
+
+<script id="cartera24-pwa-registration">
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('./service-worker.js')
+      .catch(function (err) { console.error('Service Worker:', err); });
+  });
+}
+</script>
+
 </body></html>

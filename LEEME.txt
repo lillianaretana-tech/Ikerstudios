@@ -1,15 +1,13 @@
-CARTERA 24 — PWA
-================
-Archivos:
+CARTERA 24 - PWA V15 CORREGIDA
+
+Reemplace en GitHub los archivos de la versión anterior por estos archivos.
+Especialmente:
 - index.html
-- manifest.webmanifest
 - service-worker.js
+- manifest.webmanifest
 - icon-192.png
 - icon-512.png
 
-IMPORTANTE:
-La instalación PWA requiere publicar estos archivos por HTTPS.
-No funciona como PWA instalable abriendo index.html directamente desde C:\.
-
-Los datos continúan en Supabase. El service worker guarda la interfaz básica,
-pero iniciar sesión, consultar datos y registrar operaciones requieren conexión.
+Esta versión corrige la inserción del código PWA al final real del documento.
+El service worker usa un caché nuevo (cartera24-v15) para evitar conservar
+la versión dañada anterior.
