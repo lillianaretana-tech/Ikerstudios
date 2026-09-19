@@ -1,5 +1,5 @@
-const CACHE='cartera24-v15';
-const CORE=['./manifest.webmanifest','./icon-192.png','./icon-512.png'];
+const CACHE='cartera24-v16';
+const CORE=['./manifest.webmanifest','./icon-192.png','./icon-512.png','./icon-maskable-192.png','./icon-maskable-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
 });
