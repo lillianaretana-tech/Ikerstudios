@@ -1,0 +1,15 @@
+CARTERA 24 — PWA
+================
+Archivos:
+- index.html
+- manifest.webmanifest
+- service-worker.js
+- icon-192.png
+- icon-512.png
+
+IMPORTANTE:
+La instalación PWA requiere publicar estos archivos por HTTPS.
+No funciona como PWA instalable abriendo index.html directamente desde C:\.
+
+Los datos continúan en Supabase. El service worker guarda la interfaz básica,
+pero iniciar sesión, consultar datos y registrar operaciones requieren conexión.

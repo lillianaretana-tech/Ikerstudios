@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Cartera 24</title>
+<style>
+:root{
+ --ink:#292421; --muted:#756a63; --cream:#f6efe5; --paper:#fffaf3;
+ --copper:#a95336; --copper2:#7f3c29; --sand:#e7d4bd; --warn:#a33e32;
+ --shadow:0 8px 24px rgba(57,40,31,.10);
+}
+*{box-sizing:border-box} body{margin:0;background:var(--cream);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+.app{max-width:520px;margin:auto;min-height:100vh;background:var(--cream);padding-bottom:88px}
+header{padding:20px 18px 12px;background:linear-gradient(135deg,#3a302b,#211d1a);color:#fff;position:sticky;top:0;z-index:4}
+.brand{display:flex;justify-content:space-between;align-items:center}.brand h1{font-size:20px;margin:0}.brand small{opacity:.72}
+header .date{margin-top:7px;font-size:13px;opacity:.82}
+main{padding:16px}
+.hero{background:linear-gradient(135deg,var(--copper),var(--copper2));color:white;border-radius:22px;padding:18px;box-shadow:var(--shadow)}
+.hero small{opacity:.85}.hero .money{font-size:34px;font-weight:800;margin:4px 0 2px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.stat,.card{background:var(--paper);border:1px solid #eadfD2;border-radius:18px;padding:14px;box-shadow:0 3px 10px rgba(60,42,32,.05)}
+.stat b{display:block;font-size:20px;margin-top:4px}.stat small,.sub{color:var(--muted)}
+.section-title{display:flex;align-items:center;justify-content:space-between;margin:20px 2px 10px}.section-title h2{font-size:17px;margin:0}
+.person{display:flex;gap:10px;align-items:center;margin-bottom:10px}.avatar{width:43px;height:43px;border-radius:50%;background:var(--sand);display:grid;place-items:center;font-weight:800;color:var(--copper2)}
+.info{flex:1}.info b{display:block}.info small{color:var(--muted)}
+button{border:0;border-radius:13px;padding:11px 13px;font-weight:750;cursor:pointer}
+.primary{background:var(--copper);color:#fff}.secondary{background:#efe2d3;color:var(--copper2)}.danger{background:#f4d9d5;color:var(--warn)}
+.big{width:100%;padding:15px;font-size:16px}
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(520px,100%);background:#fffaf3;border-top:1px solid #dfd1c3;display:grid;grid-template-columns:repeat(4,1fr);padding:8px 4px calc(8px + env(safe-area-inset-bottom));z-index:5}
+.nav button{background:none;color:var(--muted);padding:7px 2px;font-size:11px}.nav button.active{color:var(--copper2);font-weight:900}.nav span{display:block;font-size:20px;margin-bottom:2px}
+.view{display:none}.view.active{display:block}
+label{display:block;font-size:12px;font-weight:800;margin:11px 2px 5px;color:var(--muted)}
+input,select{width:100%;border:1px solid #d9c7b5;background:#fff;border-radius:12px;padding:13px;font-size:16px;color:var(--ink)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.pill{display:inline-block;border-radius:999px;padding:5px 9px;background:#efe2d3;color:var(--copper2);font-size:11px;font-weight:800}
+.pill.late{background:#f4d9d5;color:var(--warn)}
+.loan{margin-bottom:10px}.loan-top{display:flex;justify-content:space-between;gap:10px}.balance{font-size:20px;font-weight:850;color:var(--copper2)}
+.progress{height:8px;background:#eadfd4;border-radius:20px;overflow:hidden;margin:10px 0}.progress i{display:block;height:100%;background:var(--copper);width:55%}
+.modal{position:fixed;inset:0;background:rgba(25,20,17,.56);z-index:20;display:none;align-items:flex-end;justify-content:center}.modal.show{display:flex}.sheet{width:min(520px,100%);background:var(--paper);border-radius:24px 24px 0 0;padding:20px;max-height:88vh;overflow:auto}
+.sheet h3{margin:0 0 5px}.actions{display:flex;gap:8px;margin-top:14px}.actions button{flex:1}
+.receipt{border:1px dashed #b9987e;padding:15px;border-radius:14px;background:#fff;margin-top:12px}.receipt h3{text-align:center}.receipt-line{display:flex;justify-content:space-between;margin:7px 0}
+.empty{color:var(--muted);text-align:center;padding:24px}
+footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
+.role-note{font-size:12px;color:var(--muted);margin-top:6px}.collector-row{display:flex;align-items:center;gap:10px;margin-top:10px}.collector-row .info{min-width:0}.collector-actions{display:flex;gap:6px;flex-wrap:wrap}.owner-only{}
+
+.auth-screen{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,#f6efe5,#ead7c4);display:grid;place-items:center;padding:20px}.auth-card{width:min(430px,100%);background:var(--paper);border-radius:24px;padding:24px;box-shadow:var(--shadow)}.auth-card h1{margin:0 0 4px}.auth-card p{color:var(--muted);margin:0 0 18px}.auth-msg{font-size:13px;margin-top:10px;color:var(--warn)}.hidden{display:none!important}.loading{position:fixed;inset:0;background:rgba(246,239,229,.82);z-index:40;display:grid;place-items:center;font-weight:800;color:var(--copper2)}
+</style>
+
+<style>
+/* V14 — ajuste visual de formularios */
+#sheet textarea,
+.sheet textarea,
+.modal textarea {
+  display: block;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 100% !important;
+  box-sizing: border-box;
+  resize: vertical;
+}
+</style>
+
+
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#2b211d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cartera 24">
+<link rel="apple-touch-icon" href="./icon-192.png">
+
+</head>
+<body>
+<div id="loading" class="loading">Cargando Cartera 24…</div>
+<div id="authScreen" class="auth-screen hidden"><div class="auth-card">
+<h1>Cartera 24</h1><p>Acceso seguro · LillyTech / 3RS Integrated Solutions</p>
+<label>Correo</label><input id="authEmail" type="email" value="ikerbusiness40@gmail.com" autocomplete="email">
+<label>Contraseña</label><input id="authPassword" type="password" autocomplete="current-password" placeholder="Contraseña">
+<button class="primary big" style="margin-top:14px" onclick="login()">Ingresar</button>
+
+<div id="authMsg" class="auth-msg"></div>
+</div></div>
+<div class="app">
+<header>
+ <div class="brand"><div><h1>Cartera 24</h1><small>Control de cobros y préstamos</small></div><button class="pill" id="logoutBtn" onclick="logout()" style="display:none;border:0">Salir</button></div>
+ <div class="date" id="todayLabel"></div>
+</header>
+
+<main>
+<section id="daily" class="view active">
+ <div class="hero owner-only"><small>Disponible para prestar</small><div class="money" id="available">₡0</div><small>Caja disponible después de movimientos de hoy</small></div>
+ <div class="grid owner-only">
+  <div class="stat"><small>Por cobrar hoy</small><b id="dueToday">₡0</b></div>
+  <div class="stat"><small>Cobrado hoy</small><b id="collected">₡0</b></div>
+  <div class="stat"><small>Pendiente hoy</small><b id="pending">₡0</b></div>
+  <div class="stat"><small>Gastos hoy</small><b id="expenses">₡0</b></div>
+ </div>
+ <button class="primary big owner-only" onclick="openExpense()">＋ Registrar gasto</button>
+ <div class="section-title"><h2>Cobros de hoy</h2><span class="sub" id="countToday"></span></div>
+ <div id="todayList"></div>
+</section>
+
+<section id="loans" class="view">
+ <button class="primary big owner-only" onclick="openNewLoan()">＋ Nuevo préstamo</button>
+ <div class="section-title"><h2>Créditos activos</h2><span class="sub" id="loanCount"></span></div>
+ <div id="loanList"></div>
+</section>
+
+<section id="clients" class="view">
+ <div class="section-title"><h2>Clientes</h2><span class="sub">Historial</span></div>
+ <input id="search" placeholder="Buscar por nombre, identificación o teléfono…" oninput="renderClients()">
+ <div id="clientList" style="margin-top:12px"></div>
+</section>
+
+<section id="admin" class="view">
+ <div class="section-title"><h2>Administrador</h2><span class="sub">Resumen general</span></div>
+ <div class="grid">
+  <div class="stat"><small>Capital colocado</small><b id="capitalOut"></b></div>
+  <div class="stat"><small>Saldo por cobrar</small><b id="portfolio"></b></div>
+  <div class="stat"><small>Créditos activos</small><b id="activeCount"></b></div>
+  <div class="stat"><small>Refinanciados</small><b id="refiCount"></b></div>
+ </div>
+ <div class="card">
+  <b>Consulta mensual</b>
+  <label>Mes</label><input type="month" value="2026-09">
+  <div class="grid">
+   <div><small class="sub">Cobros</small><div class="balance">₡315.000</div></div>
+   <div><small class="sub">Préstamos</small><div class="balance">₡210.000</div></div>
+  </div>
+  <button class="secondary big" onclick="alert('En la versión final aquí se generará el reporte mensual.')">Ver reporte</button>
+ </div>
+ <div class="card owner-only" id="reportsAdmin" style="margin-top:10px">
+  <div class="section-title" style="margin:0 0 6px"><h2>Reportes</h2></div>
+  <div class="sub">Informe financiero y de cartera listo para guardar o compartir.</div>
+
+  <div class="actions" style="margin-top:16px;gap:10px;flex-wrap:wrap">
+    <button class="secondary" style="min-width:130px;flex:1" onclick="setReportPeriod('current')">Este mes</button>
+    <button class="secondary" style="min-width:130px;flex:1" onclick="setReportPeriod('previous')">Mes anterior</button>
+    <button class="secondary" style="min-width:130px;flex:1" onclick="toggleCustomReport()">Personalizado</button>
+  </div>
+
+  <div id="customReportDates" class="grid" style="margin-top:10px;display:none">
+   <div><label>Desde</label><input id="reportFrom" type="date"></div>
+   <div><label>Hasta</label><input id="reportTo" type="date"></div>
+  </div>
+
+  <button class="primary full" style="margin-top:14px;padding:14px" onclick="renderReport()">Generar reporte</button>
+  <div id="reportResult" style="margin-top:12px"></div>
+ </div>
+ <div class="card owner-only" id="capitalAdmin" style="margin-top:10px">
+  <div class="section-title" style="margin:0 0 8px"><h2>Capital de la cartera</h2><button class="primary" onclick="openCapital()">＋ Registrar</button></div>
+  <div class="sub">Registra el capital inicial y cualquier aporte adicional. Todo queda con fecha e historial.</div>
+  <div class="grid" style="margin-top:10px">
+   <div><small class="sub">Capital aportado</small><div class="balance" id="capitalTotal">₡0</div></div>
+   <div><small class="sub">Disponible actual</small><div class="balance" id="capitalAvailable">₡0</div></div>
+  </div>
+  <div id="capitalHistory" style="margin-top:10px"></div>
+ </div>
+ <div class="card owner-only" id="collectorAdmin" style="margin-top:10px">
+  <div class="section-title" style="margin:0 0 8px"><h2>Cobradores</h2><button class="primary" onclick="openNewCollector()">＋ Agregar</button></div>
+  <div class="sub">Crea accesos, activa/desactiva cobradores y reasigna cartera sin perder historial.</div>
+  <div id="collectorList" style="margin-top:10px"></div>
+ </div>
+ <div class="card" style="margin-top:10px">
+  <b>Regla del crédito</b>
+  <p class="sub">Ciclo de 24 días · 20% fijo. Al vencimiento, el saldo pendiente inicia un nuevo ciclo con 20%.</p>
+ </div>
+</section>
+<footer>Desarrollado por LillyTech · 3RS Integrated Solutions</footer>
+</main>
+
+<nav class="nav">
+ <button class="active" onclick="go('daily',this)"><span>⌂</span>Hoy</button>
+ <button onclick="go('loans',this)"><span>▤</span>Créditos</button>
+ <button onclick="go('clients',this)"><span>♙</span>Clientes</button>
+ <button onclick="go('admin',this)"><span>⚙</span>Admin</button>
+</nav>
+</div>
+
+<div id="modal" class="modal" onclick="if(event.target===this)closeModal()"><div class="sheet" id="sheet"></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+const SUPABASE_URL='https://mzsxdobicqmbnajqpbfe.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16c3hkb2JpY3FtYm5hanFwYmZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3ODA2ODcsImV4cCI6MjEwNTM1NjY4N30.SPjpl7XtuDUFRwESMf-ccpbGDPK2WiBLjQru5drlnKk';
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const money=n=>'₡'+Math.round(Number(n||0)).toLocaleString('es-CR');
+let session=null, role=null, clients=[], loans=[], cycles=[], payments=[], loanExpenses=[], cashMovements=[], capitalContributions=[], collectors=[];
+const todayISO=()=>new Date().toLocaleDateString('en-CA',{timeZone:'America/Costa_Rica'});
+const fmtDate=s=>{if(!s)return '—';let [y,m,d]=s.slice(0,10).split('-');return `${d}/${m}/${y}`};
+const cycleFor=id=>cycles.filter(c=>c.loan_id===id).sort((a,b)=>b.cycle_number-a.cycle_number)[0];
+const paidForCycle=id=>payments.filter(p=>p.cycle_id===id).reduce((s,p)=>s+Number(p.amount),0);
+const balanceForLoan=id=>{const c=cycleFor(id);return c?Math.max(0,Number(c.amount_due)-paidForCycle(c.id)):0};
+const clientFor=id=>clients.find(c=>c.id===id)||{};
+function setLoading(v){document.getElementById('loading').classList.toggle('hidden',!v)}
+function authMessage(m){document.getElementById('authMsg').textContent=m||''}
+async function init(){
+ const {data}=await sb.auth.getSession(); session=data.session;
+ if(!session){setLoading(false);authScreen.classList.remove('hidden');return}
+ await enterApp();
+}
+async function login(){authMessage('Ingresando…'); const {data,error}=await sb.auth.signInWithPassword({email:authEmail.value.trim(),password:authPassword.value}); if(error){authMessage(error.message);return} session=data.session; await enterApp()}
+async function signup(){
+ const email=authEmail.value.trim(), password=authPassword.value;
+ if(password.length<8){authMessage('Use una contraseña de al menos 8 caracteres.');return}
+ authMessage('Creando acceso…');
+ const {data,error}=await sb.auth.signUp({email,password});
+ if(error){authMessage(error.message);return}
+ if(!data.session){authMessage('Cuenta creada. Revise el correo para confirmar el acceso y luego ingrese.');return}
+ session=data.session; await enterApp();
+}
+async function logout(){await sb.auth.signOut();location.reload()}
+async function enterApp(){
+ setLoading(true); authScreen.classList.add('hidden'); logoutBtn.style.display='inline-block';
+ const {data:a,error:e}=await sb.rpc('get_my_app_access',{p_app:'loans'}).maybeSingle();
+ if(e||!a){setLoading(false);authScreen.classList.remove('hidden');authMessage('Esta cuenta todavía no tiene acceso a Préstamos.');return}
+ role=a.role; applyRoleUI(); await loadAll(); setLoading(false);
+}
+async function loadAll(){
+ const owner=['owner','admin'].includes(role);
+ const base=[
+  sb.from('loans_clients').select('*').eq('active',true).order('full_name'),
+  sb.from('loans_loans').select('*').order('created_at',{ascending:false}),
+  sb.from('loans_cycles').select('*').order('cycle_number'),
+  sb.from('loans_payments').select('*').order('payment_date',{ascending:false})
+ ];
+ if(owner){base.push(sb.from('loans_expenses').select('*').order('expense_date',{ascending:false}),sb.from('loans_cash_movements').select('*').order('occurred_at',{ascending:false}),sb.from('loans_capital_contributions').select('*').order('contribution_date',{ascending:false}).order('created_at',{ascending:false}))}
+ const res=await Promise.all(base); const err=res.find(x=>x.error)?.error;
+ if(err){alert('No se pudieron cargar los datos: '+err.message);return}
+ clients=res[0].data||[];loans=res[1].data||[];cycles=res[2].data||[];payments=res[3].data||[];
+ loanExpenses=owner?(res[4].data||[]):[]; cashMovements=owner?(res[5].data||[]):[]; capitalContributions=owner?(res[6].data||[]):[];
+ if(owner) await loadCollectors(); else collectors=[];
+ render();
+}
+async function loadCollectors(){
+ const {data:a,error}=await sb.from('app_access').select('user_id,active').eq('app','loans').eq('role','collector');
+ if(error){console.warn(error);collectors=[];return}
+ const ids=(a||[]).map(x=>x.user_id); if(!ids.length){collectors=[];return}
+ const {data:p}=await sb.from('app_profiles').select('user_id,full_name,active').in('user_id',ids);
+ collectors=(a||[]).map(x=>({...x,full_name:(p||[]).find(y=>y.user_id===x.user_id)?.full_name||'Cobrador'}));
+}
+function applyRoleUI(){
+ const owner=['owner','admin'].includes(role);
+ document.querySelectorAll('.owner-only').forEach(x=>x.style.display=owner?'':'none');
+ const adminBtn=document.querySelector('.nav button[onclick*="admin"]');
+ if(adminBtn) adminBtn.style.display=owner?'':'none';
+ document.querySelector('.nav').style.gridTemplateColumns=owner?'repeat(4,1fr)':'repeat(3,1fr)';
+}
+function todayLoans(){return loans.filter(l=>['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0)}
+function paidTodayForLoan(id){
+ const today=todayISO();
+ return payments.filter(p=>p.loan_id===id&&String(p.payment_date).slice(0,10)===today).reduce((s,p)=>s+Number(p.amount),0);
+}
+function scheduledTodayForLoan(l){return Math.min(Number(l.expected_payment||0),balanceForLoan(l.id)+paidTodayForLoan(l.id))}
+function pendingTodayForLoan(l){return Math.max(0,scheduledTodayForLoan(l)-paidTodayForLoan(l.id))}
+function pendingTodayLoans(){return todayLoans().filter(l=>pendingTodayForLoan(l)>0)}
+function render(){
+ const today=todayISO();
+ const collected=payments.filter(p=>String(p.payment_date).slice(0,10)===today).reduce((s,p)=>s+Number(p.amount),0);
+ const exp=loanExpenses.filter(e=>String(e.expense_date).slice(0,10)===today).reduce((s,e)=>s+Number(e.amount),0);
+ const cash=cashMovements.reduce((s,m)=>s+Number(m.amount),0);
+ const due=todayLoans().reduce((s,l)=>s+scheduledTodayForLoan(l),0);
+ const pendingAmount=todayLoans().reduce((s,l)=>s+pendingTodayForLoan(l),0);
+ const pendingLoans=pendingTodayLoans();
+ available.textContent=money(cash);dueToday.textContent=money(due);document.getElementById('collected').textContent=money(collected);pending.textContent=money(pendingAmount);expenses.textContent=money(exp);
+ countToday.textContent=pendingLoans.length+' pendiente'+(pendingLoans.length===1?'':'s');
+ todayList.innerHTML=pendingLoans.map(l=>{const c=clientFor(l.client_id),bal=balanceForLoan(l.id),remaining=pendingTodayForLoan(l);return `<div class="card person"><div class="avatar">${(c.full_name||'?').split(' ').map(v=>v[0]).slice(0,2).join('')}</div><div class="info"><b>${c.full_name||'Cliente'}</b><small>Pendiente hoy ${money(remaining)} · Saldo ${money(bal)}</small></div><button class="primary" onclick="openPay('${l.id}')">Cobrar</button></div>`}).join('')||'<div class="empty">✓ Cobros de hoy completados.</div>';
+ renderLoans();renderClients();renderAdmin();
+ document.getElementById('todayLabel').textContent=new Intl.DateTimeFormat('es-CR',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'America/Costa_Rica'}).format(new Date());
+ if(['owner','admin'].includes(role)&&document.getElementById('reportFrom')&&!document.getElementById('reportFrom').value){
+   setReportPeriod('current');
+ }
+}
+
+function activeCycleForLoan(id){return cycles.filter(c=>c.loan_id===id&&c.status==='active').sort((a,b)=>Number(b.cycle_number)-Number(a.cycle_number))[0]||null}
+function cyclePaid(cycleId){return payments.filter(p=>p.cycle_id===cycleId).reduce((s,p)=>s+Number(p.amount||0),0)}
+function cycleRemaining(c){return Math.max(0,Number(c.amount_due||0)-cyclePaid(c.id))}
+function isCycleDue(c){return c&&todayISO()>=String(c.due_date).slice(0,10)}
+function loanCycleLabel(l){const c=activeCycleForLoan(l.id);return c?`Ciclo ${c.cycle_number} · vence ${fmtDate(c.due_date)}`:'Sin ciclo activo'}
+function renderLoans(){
+ const active=loans.filter(l=>['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0);
+ loanList.innerHTML=active.map(l=>{
+   const c=clientFor(l.client_id),bal=balanceForLoan(l.id),cy=activeCycleForLoan(l.id),due=cy&&isCycleDue(cy)&&cycleRemaining(cy)>0;
+   return `<div class="card">
+    <div class="section-title" style="margin:0"><div><b>${c.full_name}</b><div class="sub">${loanCycleLabel(l)} · Saldo ${money(bal)}</div></div><span class="pill ${due?'danger':''}">${due?'Vencido':'Activo'}</span></div>
+    ${due&&['owner','admin'].includes(role)?`<div class="sub" style="margin-top:8px">Saldo pendiente al vencimiento: <b>${money(cycleRemaining(cy))}</b>. Al refinanciar se aplicará 20% y se abrirá un nuevo ciclo de 24 días.</div>`:''}
+    <div class="actions" style="margin-top:10px">
+      <button class="secondary" onclick="openLoanHistory('${l.id}')">Historial</button>
+      ${due&&['owner','admin'].includes(role)?`<button class="primary" onclick="confirmRefinance('${l.id}')">Refinanciar</button>`:''}
+    </div>
+   </div>`;
+ }).join('')||'<div class="empty">No hay créditos activos.</div>';
+}
+function renderClients(){
+ let q=(document.getElementById('search')?.value||'').trim().toLowerCase();
+ let list=clients.filter(c=>[c.full_name,c.identification,c.phone].some(v=>String(v||'').toLowerCase().includes(q)));
+ clientList.innerHTML=list.map(c=>{
+   let ls=loans.filter(l=>l.client_id===c.id),bal=ls.reduce((s,l)=>s+balanceForLoan(l.id),0);
+   return `<div class="card person"><div class="avatar">${(c.full_name||'?')[0]}</div><div class="info"><b>${c.full_name}</b><small>${c.identification?`ID ${c.identification} · `:''}${c.phone?`${c.phone} · `:''}Saldo ${money(bal)}</small></div><button class="secondary" onclick="openClientFile('${c.id}')">Expediente</button></div>`;
+ }).join('')||'<div class="empty">Sin clientes.</div>';
+}
+
+
+
+function clientLoans(id){return loans.filter(l=>l.client_id===id).sort((a,b)=>String(b.start_date).localeCompare(String(a.start_date)))}
+function openClientFile(id){
+ const c=clients.find(x=>x.id===id); if(!c)return;
+ const ls=clientLoans(id), ps=payments.filter(p=>ls.some(l=>l.id===p.loan_id)).sort((a,b)=>String(b.payment_date).localeCompare(String(a.payment_date)));
+ const totalLoaned=ls.reduce((s,l)=>s+Number(l.principal||0),0),totalPaid=ps.reduce((s,p)=>s+Number(p.amount||0),0),bal=ls.reduce((s,l)=>s+balanceForLoan(l.id),0);
+ sheet.innerHTML=`<h3>${c.full_name}</h3><div class="sub">Expediente del cliente</div>
+ <div class="card" style="margin-top:10px">
+  <div class="receipt-line"><span>Identificación</span><b>${c.identification||'No registrada'}</b></div>
+  <div class="receipt-line"><span>Teléfono</span><b>${c.phone||'No registrado'}</b></div>
+  <div class="receipt-line"><span>Dirección / referencia</span><b style="max-width:62%;text-align:right">${c.address||'No registrada'}</b></div>
+  <div style="margin-top:8px"><small class="sub">Notas</small><div>${c.notes||'Sin notas.'}</div></div>
+ </div>
+ <div class="grid">
+  <div class="stat"><small>Total prestado</small><b>${money(totalLoaned)}</b></div>
+  <div class="stat"><small>Total abonado</small><b>${money(totalPaid)}</b></div>
+  <div class="stat"><small>Saldo pendiente</small><b>${money(bal)}</b></div>
+  <div class="stat"><small>Créditos</small><b>${ls.length}</b></div>
+ </div>
+ <h4 style="margin-bottom:6px">Créditos</h4>
+ ${ls.length?ls.map(l=>`<div class="card"><div class="section-title" style="margin:0"><div><b>${fmtDate(l.start_date)}</b><div class="sub">${loanCycleLabel(l)} · Saldo ${money(balanceForLoan(l.id))}</div></div><button class="secondary" onclick="openLoanHistory('${l.id}')">Ver historial</button></div></div>`).join(''):'<div class="empty">Este cliente todavía no tiene créditos.</div>'}
+ <h4 style="margin-bottom:6px">Últimos pagos</h4>
+ ${ps.length?ps.slice(0,10).map(p=>`<div class="receipt-line"><span>${fmtDate(p.payment_date)}</span><b>${money(p.amount)}</b></div>`).join(''):'<div class="sub">Sin pagos registrados.</div>'}
+ <div class="actions" style="margin-top:14px">${['owner','admin'].includes(role)?`<button class="primary" onclick="editClient('${c.id}')">Editar cliente</button>`:''}<button class="secondary" onclick="closeModal()">Cerrar</button></div>`;
+ modal.classList.add('show');
+}
+function editClient(id){
+ const c=clients.find(x=>x.id===id); if(!c)return;
+ sheet.innerHTML=`<h3>Editar cliente</h3>
+ <label>Nombre completo</label><input id="ecName" value="${String(c.full_name||'').replace(/"/g,'&quot;')}">
+ <label>Identificación</label><input id="ecId" value="${String(c.identification||'').replace(/"/g,'&quot;')}" placeholder="Cédula / identificación">
+ <label>Teléfono</label><input id="ecPhone" value="${String(c.phone||'').replace(/"/g,'&quot;')}" placeholder="8888-8888">
+ <label>Dirección / referencia</label><textarea id="ecAddress" rows="3" placeholder="Dirección o punto de referencia">${c.address||''}</textarea>
+ <label>Notas</label><textarea id="ecNotes" rows="3" placeholder="Información útil del cliente">${c.notes||''}</textarea>
+ <div class="actions"><button class="secondary" onclick="openClientFile('${id}')">Cancelar</button><button class="primary" onclick="saveClient('${id}')">Guardar cambios</button></div>`;
+}
+async function saveClient(id){
+ const name=document.getElementById('ecName').value.trim();
+ if(!name){alert('El nombre del cliente es obligatorio.');return}
+ setLoading(true);
+ const {error}=await sb.from('loans_clients').update({
+  full_name:name,
+  identification:document.getElementById('ecId').value.trim()||null,
+  phone:document.getElementById('ecPhone').value.trim()||null,
+  address:document.getElementById('ecAddress').value.trim()||null,
+  notes:document.getElementById('ecNotes').value.trim()||null
+ }).eq('id',id);
+ if(error){setLoading(false);alert(error.message);return}
+ await loadAll();setLoading(false);openClientFile(id);
+}
+function inRange(date,from,to){const d=String(date||'').slice(0,10);return d&&d>=from&&d<=to}
+function isoLocalDate(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function prettyDate(s){if(!s)return '';const [y,m,d]=s.split('-');return `${d}/${m}/${y}`}
+function periodLabel(from,to){return `${prettyDate(from)} al ${prettyDate(to)}`}
+function setReportPeriod(which){
+ const now=new Date(),fromEl=document.getElementById('reportFrom'),toEl=document.getElementById('reportTo');
+ let a,b;
+ if(which==='previous'){
+   a=new Date(now.getFullYear(),now.getMonth()-1,1);
+   b=new Date(now.getFullYear(),now.getMonth(),0);
+ }else{
+   a=new Date(now.getFullYear(),now.getMonth(),1);
+   b=now;
+ }
+ fromEl.value=isoLocalDate(a);toEl.value=isoLocalDate(b);
+ document.getElementById('customReportDates').style.display='none';
+ renderReport();
+}
+function toggleCustomReport(){
+ const box=document.getElementById('customReportDates');
+ box.style.display=box.style.display==='none'?'grid':'none';
+}
+function reportData(){
+ const from=document.getElementById('reportFrom').value,to=document.getElementById('reportTo').value;
+ const rLoans=loans.filter(l=>inRange(l.start_date,from,to));
+ const rPayments=payments.filter(p=>inRange(p.payment_date,from,to));
+ const rExpenses=loanExpenses.filter(e=>inRange(e.expense_date,from,to));
+ const rCapital=capitalContributions.filter(x=>inRange(x.contribution_date,from,to));
+ const placed=rLoans.reduce((s,l)=>s+Number(l.principal||0),0);
+ const collected=rPayments.reduce((s,p)=>s+Number(p.amount||0),0);
+ const spent=rExpenses.reduce((s,e)=>s+Number(e.amount||0),0);
+ const capital=rCapital.reduce((s,x)=>s+Number(x.amount||0),0);
+ const portfolio=loans.filter(l=>['active','refinanced'].includes(l.status)).reduce((s,l)=>s+balanceForLoan(l.id),0);
+ const available=cashMovements.reduce((s,m)=>s+Number(m.amount||0),0);
+ const cashResult=collected-spent-placed;
+ return {from,to,rLoans,rPayments,rExpenses,rCapital,placed,collected,spent,capital,portfolio,available,cashResult};
+}
+function reportCard(label,value,note=''){
+ return `<div class="stat"><small>${label}</small><b>${money(value)}</b>${note?`<div class="sub" style="margin-top:4px">${note}</div>`:''}</div>`;
+}
+function renderReport(){
+ const f=document.getElementById('reportFrom'),tt=document.getElementById('reportTo');
+ if(!f.value||!tt.value){alert('Selecciona el período del reporte.');return}
+ if(f.value>tt.value){alert('La fecha inicial no puede ser posterior a la final.');return}
+ const r=reportData();
+ document.getElementById('reportResult').innerHTML=`
+ <div style="padding:18px;border:1px solid #ead9ca;border-radius:16px;background:#fffaf5">
+   <div style="font-weight:800;font-size:18px">Informe de Cartera 24</div>
+   <div class="sub">Período: ${periodLabel(r.from,r.to)}</div>
+   <div class="grid" style="margin-top:12px">
+    ${reportCard('Préstamos colocados',r.placed)}
+    ${reportCard('Cobros recibidos',r.collected)}
+    ${reportCard('Gastos',r.spent)}
+    ${reportCard('Movimiento operativo de caja',r.cashResult,'Cobros recibidos − gastos − préstamos entregados')}
+    ${reportCard('Capital aportado',r.capital,'Dinero puesto por el propietario; no es ganancia')}
+    ${reportCard('Cartera pendiente actual',r.portfolio)}
+    ${reportCard('Disponible para prestar',r.available)}
+   </div>
+   <div style="margin-top:12px;padding:10px;border-radius:12px;background:#f4e8dc;font-size:13px">
+     <b>Lectura rápida:</b> el capital aportado se presenta por separado. El movimiento operativo de caja muestra cuánto efectivo entró o salió por cobros, gastos y préstamos entregados. Un valor negativo no significa necesariamente una pérdida: puede reflejar dinero que salió para financiar nuevos préstamos.
+   </div>
+   <div class="actions" style="margin-top:12px">
+    <button class="secondary" onclick="exportReportExcel()">⬇ Descargar Excel</button>
+    <button class="primary" onclick="printReport()">⬇ Descargar PDF</button>
+   </div>
+ </div>`;
+}
+function exportReportExcel(){
+ if(typeof XLSX==='undefined'){alert('No se pudo cargar el generador de Excel. Comprueba la conexión a internet e inténtalo de nuevo.');return}
+ const r=reportData(),wb=XLSX.utils.book_new();
+ const currencyFmt='₡#,##0;[Red]-₡#,##0';
+ const headerFill='9B452D', lightFill='F3E4D7', dark='2B211D', white='FFFFFF';
+
+ function styleCell(cell,opts={}){
+   if(!cell)return;
+   cell.s=cell.s||{};
+   cell.s.font={name:'Calibri',sz:opts.sz||11,bold:!!opts.bold,color:{rgb:opts.fontColor||dark}};
+   if(opts.fill)cell.s.fill={patternType:'solid',fgColor:{rgb:opts.fill}};
+   cell.s.alignment={vertical:'center',horizontal:opts.align||'left',wrapText:true};
+   if(opts.border)cell.s.border={bottom:{style:'thin',color:{rgb:'D8C5B5'}}};
+ }
+ function moneyCols(ws,cols,from,to){for(let row=from;row<=to;row++)for(const col of cols){const c=ws[`${col}${row}`];if(c)c.z=currencyFmt}}
+ function finishDetail(ws,headers,widths,totalCol,totalLabelCol,lastDataRow){
+   headers.forEach((_,i)=>styleCell(ws[XLSX.utils.encode_cell({r:0,c:i})],{bold:true,fill:headerFill,fontColor:white,align:'center'}));
+   ws['!cols']=widths.map(w=>({wch:w}));
+   ws['!autofilter']={ref:`A1:${XLSX.utils.encode_col(headers.length-1)}${Math.max(1,lastDataRow)}`};
+   ws['!freeze']={xSplit:0,ySplit:1};
+   if(lastDataRow>=2 && totalCol){
+     const tr=lastDataRow+1;
+     ws[`${totalLabelCol}${tr}`]={t:'s',v:'TOTAL'};
+     styleCell(ws[`${totalLabelCol}${tr}`],{bold:true,fill:lightFill});
+     ws[`${totalCol}${tr}`]={t:'n',f:`SUM(${totalCol}2:${totalCol}${lastDataRow})`,z:currencyFmt};
+     styleCell(ws[`${totalCol}${tr}`],{bold:true,fill:lightFill,align:'right'});
+     ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:tr-1,c:headers.length-1}});
+   }
+ }
+
+ const summary=[
+  ['CARTERA 24',''],
+  ['REPORTE FINANCIERO Y DE CARTERA',''],
+  ['',''],
+  ['Período',periodLabel(r.from,r.to)],
+  ['Generado',new Intl.DateTimeFormat('es-CR',{dateStyle:'long',timeStyle:'short'}).format(new Date())],
+  ['',''],
+  ['RESUMEN','MONTO'],
+  ['Préstamos colocados',r.placed],
+  ['Cobros recibidos',r.collected],
+  ['Gastos',r.spent],
+  ['Movimiento operativo de caja',r.cashResult],
+  ['Capital aportado',r.capital],
+  ['Cartera pendiente actual',r.portfolio],
+  ['Disponible para prestar',r.available],
+  ['',''],
+  ['NOTAS',''],
+  ['Capital aportado','Dinero puesto por el propietario. No representa ingreso ni ganancia.'],
+  ['Movimiento operativo de caja','Cobros recibidos menos gastos y préstamos entregados. Un valor negativo puede indicar dinero colocado en nuevos préstamos; no significa por sí solo una pérdida.']
+ ];
+ const ws=XLSX.utils.aoa_to_sheet(summary);
+ ws['!cols']=[{wch:34},{wch:72}];
+ ws['!merges']=[XLSX.utils.decode_range('A1:B1'),XLSX.utils.decode_range('A2:B2'),XLSX.utils.decode_range('A16:B16')];
+ styleCell(ws.A1,{bold:true,sz:20,fill:headerFill,fontColor:white});
+ styleCell(ws.A2,{bold:true,sz:13,fill:headerFill,fontColor:white});
+ styleCell(ws.A7,{bold:true,fill:lightFill}); styleCell(ws.B7,{bold:true,fill:lightFill,align:'right'});
+ for(let row=8;row<=14;row++){styleCell(ws[`A${row}`],{border:true});styleCell(ws[`B${row}`],{bold:true,align:'right',border:true});if(ws[`B${row}`])ws[`B${row}`].z=currencyFmt}
+ styleCell(ws.A16,{bold:true,fill:lightFill});
+ styleCell(ws.A17,{bold:true});styleCell(ws.A18,{bold:true});
+ ws['!rows']=[{hpt:28},{hpt:22},{hpt:8},{hpt:20},{hpt:20},{hpt:8},{hpt:22}];
+ XLSX.utils.book_append_sheet(wb,ws,'Resumen');
+
+ const loanRows=r.rLoans.map(l=>{const c=clientFor(l.client_id);return {'Fecha':prettyDate(l.start_date),'Cliente':c?.full_name||'','Monto prestado':Number(l.principal),'Interés %':Number(l.interest_rate),'Plazo (días)':Number(l.term_days),'Estado':l.status==='paid'?'Pagado':l.status==='refinanced'?'Refinanciado':'Activo','Saldo actual':balanceForLoan(l.id)}})
+ const wl=XLSX.utils.json_to_sheet(loanRows.length?loanRows:[{'Fecha':'Sin movimientos en el período','Cliente':'','Monto prestado':'','Interés %':'','Plazo (días)':'','Estado':'','Saldo actual':''}]);
+ finishDetail(wl,['Fecha','Cliente','Monto prestado','Interés %','Plazo (días)','Estado','Saldo actual'],[14,28,18,12,14,16,18],loanRows.length?'C':null,'B',loanRows.length+1);
+ if(loanRows.length){moneyCols(wl,['C','G'],2,loanRows.length+1)}
+ XLSX.utils.book_append_sheet(wb,wl,'Préstamos');
+
+ const payRows=r.rPayments.map(p=>{const l=loans.find(x=>x.id===p.loan_id),c=l?clientFor(l.client_id):null;return {'Fecha':prettyDate(p.payment_date),'Cliente':c?.full_name||'','Monto cobrado':Number(p.amount),'Forma de pago':p.payment_method==='cash'?'Efectivo':'SINPE'}})
+ const wp=XLSX.utils.json_to_sheet(payRows.length?payRows:[{'Fecha':'Sin movimientos en el período','Cliente':'','Monto cobrado':'','Forma de pago':''}]);
+ finishDetail(wp,['Fecha','Cliente','Monto cobrado','Forma de pago'],[14,30,18,20],payRows.length?'C':null,'B',payRows.length+1);
+ if(payRows.length)moneyCols(wp,['C'],2,payRows.length+1);
+ XLSX.utils.book_append_sheet(wb,wp,'Cobros');
+
+ const expRows=r.rExpenses.map(e=>({'Fecha':prettyDate(e.expense_date),'Concepto':e.concept,'Monto':Number(e.amount),'Notas':e.notes||''}))
+ const we=XLSX.utils.json_to_sheet(expRows.length?expRows:[{'Fecha':'Sin movimientos en el período','Concepto':'','Monto':'','Notas':''}]);
+ finishDetail(we,['Fecha','Concepto','Monto','Notas'],[14,30,18,42],expRows.length?'C':null,'B',expRows.length+1);
+ if(expRows.length)moneyCols(we,['C'],2,expRows.length+1);
+ XLSX.utils.book_append_sheet(wb,we,'Gastos');
+
+ const capRows=r.rCapital.map(x=>({'Fecha':prettyDate(x.contribution_date),'Tipo':x.contribution_type==='initial'?'Capital inicial':'Aporte adicional','Monto':Number(x.amount),'Notas':x.notes||''}))
+ const wc=XLSX.utils.json_to_sheet(capRows.length?capRows:[{'Fecha':'Sin movimientos en el período','Tipo':'','Monto':'','Notas':''}]);
+ finishDetail(wc,['Fecha','Tipo','Monto','Notas'],[14,24,18,42],capRows.length?'C':null,'B',capRows.length+1);
+ if(capRows.length)moneyCols(wc,['C'],2,capRows.length+1);
+ XLSX.utils.book_append_sheet(wb,wc,'Capital');
+
+ XLSX.writeFile(wb,`Cartera24_Reporte_${r.from}_${r.to}.xlsx`,{cellStyles:true});
+}
+function printReport(){
+ const r=reportData(),w=window.open('','_blank');
+ const clientName=id=>{const l=loans.find(x=>x.id===id);return l?(clientFor(l.client_id)?.full_name||'') : ''};
+ const table=(heads,rows)=>`<table><thead><tr>${heads.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.join(''):`<tr><td colspan="${heads.length}" class="empty">Sin movimientos en el período</td></tr>`}</tbody></table>`;
+ const loanRows=r.rLoans.map(l=>`<tr><td>${prettyDate(l.start_date)}</td><td>${clientFor(l.client_id)?.full_name||''}</td><td class="num">${money(l.principal)}</td><td class="num">${money(balanceForLoan(l.id))}</td></tr>`);
+ const payRows=r.rPayments.map(p=>`<tr><td>${prettyDate(p.payment_date)}</td><td>${clientName(p.loan_id)}</td><td>${p.payment_method==='cash'?'Efectivo':'SINPE'}</td><td class="num">${money(p.amount)}</td></tr>`);
+ const expRows=r.rExpenses.map(e=>`<tr><td>${prettyDate(e.expense_date)}</td><td>${e.concept}</td><td class="num">${money(e.amount)}</td></tr>`);
+ w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Cartera 24 - Reporte</title>
+ <style>
+ @page{size:letter;margin:14mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#2b211d;margin:0;font-size:11px}
+ .head{border-bottom:3px solid #9b452d;padding-bottom:10px;margin-bottom:16px}.brand{font-size:24px;font-weight:800}.title{font-size:15px;font-weight:700;margin-top:3px}.muted{color:#75675f}
+ .summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}.box{border:1px solid #dbc8b9;border-radius:8px;padding:9px}.box span{display:block;color:#75675f;font-size:10px}.box b{display:block;font-size:16px;margin-top:3px}
+ h2{font-size:14px;margin:18px 0 7px}table{width:100%;border-collapse:collapse;margin-bottom:12px}th{background:#f1e3d6;text-align:left;padding:7px;border-bottom:1px solid #cdb7a6}td{padding:7px;border-bottom:1px solid #e7ddd5}.num{text-align:right}.note{margin-top:14px;padding:9px;background:#f7efe8;border-radius:7px;color:#665850}.empty{text-align:center;color:#75675f}
+ .actions{margin:18px 0}.actions button{padding:10px 16px;font-weight:700}.footer{margin-top:20px;border-top:1px solid #ddd;padding-top:8px;font-size:9px;color:#8a7b72}
+ @media print{.actions{display:none}h2{break-after:avoid}table{break-inside:auto}tr{break-inside:avoid}}
+ </style></head><body>
+ <div class="head"><div class="brand">Cartera 24</div><div class="title">Reporte financiero y de cartera</div><div class="muted">Período: ${periodLabel(r.from,r.to)} · Generado ${new Intl.DateTimeFormat('es-CR',{dateStyle:'long',timeStyle:'short'}).format(new Date())}</div></div>
+ <div class="summary">
+  <div class="box"><span>Préstamos colocados</span><b>${money(r.placed)}</b></div>
+  <div class="box"><span>Cobros recibidos</span><b>${money(r.collected)}</b></div>
+  <div class="box"><span>Gastos</span><b>${money(r.spent)}</b></div>
+  <div class="box"><span>Movimiento operativo de caja</span><b>${money(r.cashResult)}</b></div>
+  <div class="box"><span>Capital aportado</span><b>${money(r.capital)}</b></div>
+  <div class="box"><span>Cartera pendiente actual</span><b>${money(r.portfolio)}</b></div>
+  <div class="box"><span>Disponible para prestar</span><b>${money(r.available)}</b></div>
+ </div>
+ <div class="note"><b>Importante:</b> los aportes de capital son fondos puestos por el propietario y no representan ganancia. El movimiento operativo de caja refleja cobros menos gastos y préstamos entregados; un valor negativo puede deberse a dinero colocado en nuevos préstamos y no significa por sí solo una pérdida.</div>
+ <h2>Préstamos del período</h2>${table(['Fecha','Cliente','Monto prestado','Saldo actual'],loanRows)}
+ <h2>Cobros del período</h2>${table(['Fecha','Cliente','Forma de pago','Monto'],payRows)}
+ <h2>Gastos del período</h2>${table(['Fecha','Concepto','Monto'],expRows)}
+ <div class="footer">Cartera 24 · Desarrollado por LillyTech · 3RS Integrated Solutions</div>
+ <div class="actions"><button onclick="window.print()">Guardar como PDF / Imprimir</button></div>
+ <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script>
+ 
+<script>
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js').catch(console.error);
+  });
+}
+window.addEventListener('offline',()=>console.info('Cartera 24: sin conexión. Los datos nuevos requieren internet.'));
+</script>
+
+</body></html>`);
+ w.document.close();
+}
+function renderAdmin(){if(!['owner','admin'].includes(role))return;
+ capitalOut.textContent=money(loans.reduce((s,l)=>s+Number(l.principal),0));portfolio.textContent=money(loans.reduce((s,l)=>s+balanceForLoan(l.id),0));activeCount.textContent=todayLoans().length;refiCount.textContent=cycles.filter(c=>Number(c.cycle_number)>1).length;
+ const capTotal=capitalContributions.reduce((s,x)=>s+Number(x.amount||0),0),cash=cashMovements.reduce((s,m)=>s+Number(m.amount||0),0);
+ capitalTotal.textContent=money(capTotal);capitalAvailable.textContent=money(cash);
+ capitalHistory.innerHTML=capitalContributions.length?capitalContributions.map(x=>`<div class="card" style="margin-top:8px"><b>${x.contribution_type==='initial'?'Capital inicial':'Aporte de capital'}</b><div class="sub">${money(x.amount)} · ${fmtDate(x.contribution_date)}${x.notes?' · '+x.notes:''}</div></div>`).join(''):'<div class="empty">Todavía no hay capital registrado.</div>';
+ renderCollectors()
+}
+function renderCollectors(){if(!collectorList)return;collectorList.innerHTML=collectors.map(c=>{let n=loans.filter(l=>l.collector_id===c.user_id&&balanceForLoan(l.id)>0).length;return `<div class="collector-row"><div class="avatar">${(c.full_name||'?')[0]}</div><div class="info"><b>${c.full_name}</b><small>${c.active?'Activo':'Inactivo'} · ${n} crédito(s)</small></div><div class="collector-actions">${c.active?`<button class="secondary" onclick="openReassignCollector('${c.user_id}')">Cartera</button><button class="danger" onclick="deactivateCollector('${c.user_id}')">Desactivar</button>`:'<span class="pill">INACTIVO</span>'}</div></div>`}).join('')||'<div class="empty">Todavía no hay cobradores.</div>'}
+function freqLabel(v){return ({daily:'Diario',weekly:'Semanal',custom:'Personalizado'})[v]||v}
+
+function openLoanHistory(id){
+ const l=loans.find(x=>x.id===id),c=clientFor(l.client_id),list=cycles.filter(x=>x.loan_id===id).sort((a,b)=>Number(a.cycle_number)-Number(b.cycle_number));
+ sheet.innerHTML=`<h3>${c.full_name}</h3><div class="sub">Historial del crédito</div>
+ ${list.map(cy=>{const paid=cyclePaid(cy.id),rem=Math.max(0,Number(cy.amount_due)-paid);return `<div class="card" style="margin-top:10px"><b>Ciclo ${cy.cycle_number}</b><div class="sub">${fmtDate(cy.start_date)} → ${fmtDate(cy.due_date)}</div><div style="margin-top:6px">Base: <b>${money(cy.opening_principal)}</b> · Interés: <b>${Number(cy.interest_rate)}%</b></div><div>Total ciclo: <b>${money(cy.amount_due)}</b> · Pagado: <b>${money(paid)}</b> · Saldo: <b>${money(rem)}</b></div><div class="sub">Estado: ${cy.status==='active'?'Activo':cy.status==='refinanced'?'Refinanciado':'Pagado'}</div></div>`}).join('')}
+ <div class="actions"><button class="secondary" onclick="closeModal()">Cerrar</button></div>`;
+ modal.classList.add('show');
+}
+async function confirmRefinance(id){
+ const l=loans.find(x=>x.id===id),c=clientFor(l.client_id),cy=activeCycleForLoan(id);
+ if(!cy||!isCycleDue(cy)){alert('Este crédito todavía no está listo para refinanciar.');return}
+ const rem=cycleRemaining(cy),next=Math.round(rem*1.20*100)/100;
+ if(!confirm(`¿Refinanciar el saldo de ${money(rem)} de ${c.full_name}?\n\nNuevo ciclo: ${money(next)}\nInterés: 20%\nPlazo: 24 días`))return;
+ setLoading(true);
+ const {error}=await sb.rpc('loans_refinance_cycle',{p_loan_id:id});
+ setLoading(false);
+ if(error){alert('No se pudo refinanciar: '+error.message);return}
+ await loadAll();
+ alert(`Refinanciamiento creado correctamente.\nNuevo saldo del ciclo: ${money(next)}.`);
+ openLoanHistory(id);
+}
+function openPay(id){let l=loans.find(x=>x.id===id),c=clientFor(l.client_id),bal=balanceForLoan(id),remaining=pendingTodayForLoan(l);if(remaining<=0){alert('El cobro esperado de hoy ya fue completado.');return}sheet.innerHTML=`<h3>Registrar cobro</h3><div class="sub">${c.full_name} · saldo ${money(bal)}</div><label>Monto recibido</label><input id="payAmount" type="number" value="${remaining}"><div class="sub">Pendiente esperado hoy: ${money(remaining)}</div><label>Forma de pago</label><select id="payMethod"><option value="cash">Efectivo</option><option value="sinpe">SINPE</option></select><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="pay('${id}')">Confirmar pago</button></div>`;modal.classList.add('show')}
+async function pay(id){let l=loans.find(x=>x.id===id),cy=cycleFor(id),bal=balanceForLoan(id),a=Number(payAmount.value);if(!a||a<=0||a>bal){alert('Revise el monto recibido.');return}setLoading(true);const {data:p,error}=await sb.from('loans_payments').insert({loan_id:id,cycle_id:cy.id,amount:a,payment_date:todayISO(),payment_method:payMethod.value,received_by:session.user.id,created_by:session.user.id}).select().single();if(error){setLoading(false);alert(error.message);return}if(payMethod.value==='cash')await sb.from('loans_cash_movements').insert({movement_type:'payment',amount:a,loan_id:id,payment_id:p.id,created_by:session.user.id});await loadAll();setLoading(false);let nb=balanceForLoan(id);sheet.innerHTML=`<h3>✓ Pago registrado</h3><div class="receipt"><h3>RECIBO DE PAGO</h3><div class="receipt-line"><span>Cliente</span><b>${clientFor(l.client_id).full_name}</b></div><div class="receipt-line"><span>Abono</span><b>${money(a)}</b></div><div class="receipt-line"><span>Saldo</span><b>${money(nb)}</b></div><div class="receipt-line"><span>Fecha</span><b>${fmtDate(todayISO())}</b></div></div><button class="secondary big" style="margin-top:8px" onclick="closeModal()">Cerrar</button>`}
+function openExpense(){sheet.innerHTML=`<h3>Registrar gasto</h3><label>Concepto</label><input id="expenseConcept" placeholder="Ej. transporte"><label>Monto</label><input id="expenseAmount" type="number" placeholder="0"><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveExpense()">Guardar</button></div>`;modal.classList.add('show')}
+async function saveExpense(){let a=Number(expenseAmount.value),concept=expenseConcept.value.trim();if(!a||a<=0||!concept)return;setLoading(true);const {data:e,error}=await sb.from('loans_expenses').insert({concept,amount:a,expense_date:todayISO(),created_by:session.user.id}).select().single();if(error){setLoading(false);alert(error.message);return}await sb.from('loans_cash_movements').insert({movement_type:'expense',amount:-a,expense_id:e.id,created_by:session.user.id});closeModal();await loadAll();setLoading(false)}
+function openNewLoan(){const active=collectors.filter(c=>c.active);sheet.innerHTML=`<h3>Nuevo préstamo</h3><label>Cliente</label><select id="existingClient"><option value="">＋ Cliente nuevo</option>${clients.map(c=>`<option value="${c.id}">${c.full_name}</option>`).join('')}</select><label>Nombre del cliente nuevo</label><input id="newName" placeholder="Nombre completo"><label>Identificación (opcional)</label><input id="newIdentification" placeholder="Cédula / identificación"><label>Teléfono (opcional)</label><input id="newPhone" placeholder="8888-8888"><label>Dirección / referencia (opcional)</label><textarea id="newAddress" rows="2" placeholder="Dirección o punto de referencia"></textarea><label>Notas del cliente (opcional)</label><textarea id="newClientNotes" rows="2" placeholder="Información útil"></textarea><label>Monto entregado</label><input id="newPrincipal" type="number" placeholder="100000" oninput="calcNew()"><div class="row"><div><label>Interés</label><input value="20%" disabled></div><div><label>Total a cobrar</label><input id="newTotal" disabled></div></div><div class="row"><div><label>Plazo</label><input value="24 días" disabled></div><div><label>Frecuencia</label><select id="newFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select></div></div><label>Monto esperado por cobro</label><input id="newPayment" type="number" placeholder="5000"><label>Cobrador asignado</label><select id="newCollector"><option value="">Sin asignar / Iker</option>${active.map(c=>`<option value="${c.user_id}">${c.full_name}</option>`).join('')}</select><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveLoan()">Crear préstamo</button></div>`;modal.classList.add('show')}
+function calcNew(){newTotal.value=money(Number(newPrincipal.value||0)*1.2)}
+async function saveLoan(){let p=Number(newPrincipal.value),pay=Number(newPayment.value),clientId=existingClient.value;if(!p||!pay){alert('Complete monto y cobro esperado.');return}setLoading(true);if(!clientId){let name=newName.value.trim();if(!name){setLoading(false);alert('Indique el cliente.');return}const {data:c,error}=await sb.from('loans_clients').insert({full_name:name,identification:newIdentification.value.trim()||null,phone:newPhone.value.trim()||null,address:newAddress.value.trim()||null,notes:newClientNotes.value.trim()||null}).select().single();if(error){setLoading(false);alert(error.message);return}clientId=c.id}const collectorId=newCollector.value||null;const collector=collectors.find(c=>c.user_id===collectorId);const {data:l,error}=await sb.from('loans_loans').insert({client_id:clientId,principal:p,interest_rate:20,term_days:24,start_date:todayISO(),collection_frequency:newFreq.value,expected_payment:pay,collector_id:collectorId,collector_name_snapshot:collector?.full_name||null,created_by:session.user.id}).select().single();if(error){setLoading(false);alert(error.message);return}if(collectorId)await sb.from('loans_collector_history').insert({loan_id:l.id,collector_id:collectorId,collector_name:collector.full_name,assigned_by:session.user.id});await sb.from('loans_cash_movements').insert({movement_type:'loan_disbursement',amount:-p,loan_id:l.id,created_by:session.user.id});closeModal();await loadAll();setLoading(false);go('loans',document.querySelectorAll('.nav button')[1])}
+function openCapital(){const hasInitial=capitalContributions.some(x=>x.contribution_type==='initial');sheet.innerHTML=`<h3>Registrar capital</h3><p class="sub">Este dinero aumenta el disponible para prestar y queda registrado en el historial.</p><label>Tipo</label><select id="capitalType">${hasInitial?'':'<option value="initial">Capital inicial</option>'}<option value="additional">Aporte adicional</option></select><label>Monto</label><input id="capitalAmount" type="number" min="1" placeholder="Ej. 500000"><label>Fecha</label><input id="capitalDate" type="date" value="${todayISO()}"><label>Nota (opcional)</label><input id="capitalNotes" placeholder="Ej. Capital de arranque"><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveCapital()">Guardar capital</button></div>`;modal.classList.add('show')}
+async function saveCapital(){const amount=Number(capitalAmount.value||0),type=capitalType.value,date=capitalDate.value||todayISO(),notes=capitalNotes.value.trim();if(amount<=0){alert('Indique un monto mayor que cero.');return}setLoading(true);const {error}=await sb.rpc('loans_register_capital',{p_amount:amount,p_type:type,p_date:date,p_notes:notes||null});setLoading(false);if(error){alert('No se pudo registrar el capital: '+error.message);return}closeModal();await loadAll();alert(type==='initial'?'Capital inicial registrado.':'Aporte de capital registrado.')}
+function openNewCollector(){sheet.innerHTML=`<h3>Agregar cobrador</h3><p class="sub">Iker crea el acceso directamente. No se envía correo de confirmación.</p><label>Nombre completo</label><input id="collectorName" autocomplete="off"><label>Correo / usuario</label><input id="collectorEmail" type="email" autocomplete="off"><label>Contraseña temporal</label><input id="collectorPassword" type="password" minlength="8" autocomplete="new-password"><div class="role-note">Mínimo 8 caracteres. Compártala con el cobrador por un medio privado.</div><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="createCollector()">Crear acceso</button></div>`;modal.classList.add('show')}
+async function createCollector(){const name=collectorName.value.trim(),email=collectorEmail.value.trim(),password=collectorPassword.value;if(!name||!email||password.length<8){alert('Complete nombre, correo y una contraseña temporal de al menos 8 caracteres.');return}setLoading(true);const {data,error}=await sb.functions.invoke('create-loans-collector',{body:{name,email,password}});setLoading(false);if(error||data?.error){alert(data?.error||error.message);return}closeModal();await loadAll();alert('Cobrador creado correctamente.')}
+async function deactivateCollector(id){const c=collectors.find(x=>x.user_id===id);const activeLoans=loans.filter(l=>l.collector_id===id&&balanceForLoan(l.id)>0);if(activeLoans.length){alert('Este cobrador todavía tiene '+activeLoans.length+' crédito(s) activo(s). Reasigne primero su cartera.');return}if(!confirm('¿Desactivar a '+c.full_name+'? El historial se conservará.'))return;setLoading(true);const {error}=await sb.rpc('loans_deactivate_collector',{p_collector_id:id});setLoading(false);if(error){alert(error.message);return}await loadAll()}
+function openReassignCollector(fromId){
+ const c=collectors.find(x=>x.user_id===fromId);
+ const assigned=loans.filter(l=>l.collector_id===fromId&&balanceForLoan(l.id)>0);
+ const unassigned=loans.filter(l=>!l.collector_id&&balanceForLoan(l.id)>0);
+ const others=collectors.filter(x=>x.active&&x.user_id!==fromId);
+ const assignedHtml=assigned.map(l=>{const cl=clientFor(l.client_id);return `<div class="card"><b>${cl.full_name}</b><div class="sub">Saldo ${money(balanceForLoan(l.id))}</div>${others.length?`<label>Mover a otro cobrador</label><select id="re_${l.id}"><option value="">Seleccione…</option>${others.map(o=>`<option value="${o.user_id}">${o.full_name}</option>`).join('')}</select><button class="secondary big" style="margin-top:8px" onclick="reassignLoan('${l.id}')">Reasignar</button>`:'<div class="role-note">No hay otro cobrador activo para reasignar.</div>'}</div>`}).join('')||'<div class="empty">No tiene créditos activos asignados.</div>';
+ const unassignedHtml=unassigned.map(l=>{const cl=clientFor(l.client_id);return `<div class="card"><b>${cl.full_name}</b><div class="sub">Sin cobrador · Saldo ${money(balanceForLoan(l.id))}</div><button class="primary big" style="margin-top:8px" onclick="assignLoanToCollector('${l.id}','${fromId}')">Asignar a ${c.full_name}</button></div>`}).join('')||'<div class="empty">No hay créditos sin asignar.</div>';
+ sheet.innerHTML=`<h3>Cartera de ${c.full_name}</h3><p class="sub">${assigned.length} crédito(s) activo(s) asignado(s).</p><h4>Asignados a este cobrador</h4>${assignedHtml}<h4 style="margin-top:18px">Créditos sin asignar</h4><p class="sub">Puede agregar cualquiera de estos créditos a su cartera.</p>${unassignedHtml}<button class="secondary big" style="margin-top:12px" onclick="closeModal()">Cerrar</button>`;
+ modal.classList.add('show');
+}
+async function assignLoanToCollector(loanId,collectorId){const c=collectors.find(x=>x.user_id===collectorId);if(!c||!c.active){alert('El cobrador no está activo.');return}if(!confirm('¿Asignar este crédito a '+c.full_name+'?'))return;setLoading(true);const {error}=await sb.rpc('loans_assign_collector',{p_loan_id:loanId,p_collector_id:collectorId});setLoading(false);if(error){alert(error.message);return}await loadAll();openReassignCollector(collectorId);alert('Crédito asignado correctamente.')}
+async function reassignLoan(loanId){const el=document.getElementById('re_'+loanId),to=el?.value;if(!to){alert('Seleccione el nuevo cobrador.');return}setLoading(true);const {error}=await sb.rpc('loans_assign_collector',{p_loan_id:loanId,p_collector_id:to});setLoading(false);if(error){alert(error.message);return}await loadAll();openReassignCollector(to);alert('Cartera reasignada correctamente.')}
+function openDetail(id){let l=loans.find(x=>x.id===id),c=clientFor(l.client_id),cy=cycleFor(id),ps=payments.filter(p=>p.loan_id===id);sheet.innerHTML=`<h3>${c.full_name}</h3><span class="pill">TARJETA DIGITAL</span><div class="grid"><div><small class="sub">Prestado</small><div class="balance">${money(l.principal)}</div></div><div><small class="sub">Total ciclo</small><div class="balance">${money(cy?.amount_due)}</div></div></div><div class="card"><div class="receipt-line"><span>Ciclo</span><b>${cy?.cycle_number||1}</b></div><div class="receipt-line"><span>Inicio</span><b>${fmtDate(cy?.start_date)}</b></div><div class="receipt-line"><span>Vence</span><b>${fmtDate(cy?.due_date)}</b></div><div class="receipt-line"><span>Saldo</span><b>${money(balanceForLoan(id))}</b></div>${l.collector_name_snapshot?`<div class="receipt-line"><span>Cobrador</span><b>${l.collector_name_snapshot}</b></div>`:''}</div><h4>Abonos</h4>${ps.length?ps.map(p=>`<div class="receipt-line"><span>${fmtDate(p.payment_date)}</span><b>${money(p.amount)}</b></div>`).join(''):'<div class="sub">Sin abonos.</div>'}<button class="secondary big" style="margin-top:12px" onclick="closeModal()">Cerrar</button>`;modal.classList.add('show')}
+function simulateRefi(id){let l=loans.find(x=>x.id===id),cy=cycleFor(id),bal=balanceForLoan(id),nt=bal*1.2,can=todayISO()>=cy.due_date;sheet.innerHTML=`<h3>Refinanciamiento</h3><p class="sub">El nuevo ciclo se calcula únicamente sobre el saldo pendiente.</p><div class="hero"><small>Saldo pendiente</small><div class="money">${money(bal)}</div></div><div class="card" style="margin-top:10px"><div class="receipt-line"><span>Nuevo capital</span><b>${money(bal)}</b></div><div class="receipt-line"><span>20%</span><b>${money(bal*.2)}</b></div><div class="receipt-line"><span>Nuevo total</span><b>${money(nt)}</b></div><div class="receipt-line"><span>Nuevo plazo</span><b>24 días</b></div></div>${can?`<button class="primary big" style="margin-top:10px" onclick="confirmRefi('${id}')">Confirmar nuevo ciclo</button>`:`<div class="sub" style="margin-top:12px">Disponible a partir del vencimiento: ${fmtDate(cy.due_date)}.</div>`}<button class="secondary big" style="margin-top:8px" onclick="closeModal()">Cerrar</button>`;modal.classList.add('show')}
+async function confirmRefi(id){if(!confirm('¿Crear el nuevo ciclo con 20% sobre el saldo pendiente?'))return;setLoading(true);const {error}=await sb.rpc('loans_refinance_cycle',{p_loan_id:id});setLoading(false);if(error){alert(error.message);return}closeModal();await loadAll()}
+function go(id,btn){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');window.scrollTo(0,0)}
+function closeModal(){modal.classList.remove('show')}
+init();
+</script>
+</body></html>
