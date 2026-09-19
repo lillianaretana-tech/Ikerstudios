@@ -114,8 +114,8 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
 </section>
 
 <section id="clients" class="view">
- <div class="section-title"><h2>Clientes</h2><span class="sub">Historial</span></div>
- <input id="search" placeholder="Buscar por nombre, identificación o teléfono…" oninput="renderClients()">
+ <div class="section-title"><h2>Clientes</h2><button class="primary owner-only" onclick="openNewClient()">＋ Nuevo cliente</button></div>
+ <input id="search" placeholder="Buscar por número, nombre, apellido, apodo o teléfono…" oninput="renderClients()">
  <div id="clientList" style="margin-top:12px"></div>
 </section>
 
@@ -138,13 +138,16 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
  </div>
  <div class="card owner-only" id="reportsAdmin" style="margin-top:10px">
   <div class="section-title" style="margin:0 0 6px"><h2>Reportes</h2></div>
-  <div class="sub">Informe financiero y de cartera listo para guardar o compartir.</div>
+  <div class="sub">Reportes semanal, quincenal, mensual, por cierre y por período personalizado; listos para guardar o compartir.</div>
 
   <div class="actions" style="margin-top:16px;gap:10px;flex-wrap:wrap">
-    <button class="secondary" style="min-width:130px;flex:1" onclick="setReportPeriod('current')">Este mes</button>
-    <button class="secondary" style="min-width:130px;flex:1" onclick="setReportPeriod('previous')">Mes anterior</button>
+    <button class="secondary" style="min-width:120px;flex:1" onclick="setReportPeriod('week')">Semanal</button>
+    <button class="secondary" style="min-width:120px;flex:1" onclick="setReportPeriod('fortnight')">Quincenal</button>
+    <button class="secondary" style="min-width:120px;flex:1" onclick="setReportPeriod('month')">Mensual</button>
+    <button class="secondary" style="min-width:150px;flex:1" onclick="setReportPeriod('closing')">Cierre de Iker</button>
     <button class="secondary" style="min-width:130px;flex:1" onclick="toggleCustomReport()">Personalizado</button>
   </div>
+  <div class="sub" style="margin-top:9px">El cierre de Iker se calcula automáticamente entre el primer sábado de un mes y el primer sábado del mes siguiente.</div>
 
   <div id="customReportDates" class="grid" style="margin-top:10px;display:none">
    <div><label>Desde</label><input id="reportFrom" type="date"></div>
@@ -272,7 +275,7 @@ function render(){
  const pendingLoans=pendingTodayLoans();
  available.textContent=money(cash);dueToday.textContent=money(due);document.getElementById('collected').textContent=money(collected);pending.textContent=money(pendingAmount);expenses.textContent=money(exp);
  countToday.textContent=pendingLoans.length+' pendiente'+(pendingLoans.length===1?'':'s');
- todayList.innerHTML=pendingLoans.map(l=>{const c=clientFor(l.client_id),bal=balanceForLoan(l.id),remaining=pendingTodayForLoan(l);return `<div class="card person"><div class="avatar">${(c.full_name||'?').split(' ').map(v=>v[0]).slice(0,2).join('')}</div><div class="info"><b>${c.full_name||'Cliente'}</b><small>Pendiente hoy ${money(remaining)} · Saldo ${money(bal)}</small></div><button class="primary" onclick="openPay('${l.id}')">Cobrar</button></div>`}).join('')||'<div class="empty">✓ Cobros de hoy completados.</div>';
+ todayList.innerHTML=pendingLoans.map(l=>{const c=clientFor(l.client_id),bal=balanceForLoan(l.id),remaining=pendingTodayForLoan(l);return `<div class="card person"><div class="avatar">${(c.full_name||'?').split(' ').map(v=>v[0]).slice(0,2).join('')}</div><div class="info"><b>${clientDisplayName(c)}</b><small>Pendiente hoy ${money(remaining)} · Saldo ${money(bal)}</small></div><button class="primary" onclick="openPay('${l.id}')">Cobrar</button></div>`}).join('')||'<div class="empty">✓ Cobros de hoy completados.</div>';
  renderLoans();renderClients();renderAdmin();
  document.getElementById('todayLabel').textContent=new Intl.DateTimeFormat('es-CR',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'America/Costa_Rica'}).format(new Date());
  if(['owner','admin'].includes(role)&&document.getElementById('reportFrom')&&!document.getElementById('reportFrom').value){
@@ -299,23 +302,48 @@ function renderLoans(){
    </div>`;
  }).join('')||'<div class="empty">No hay créditos activos.</div>';
 }
+function clientDisplayName(c){const legal=[c.first_name,c.last_name].filter(Boolean).join(' ');return legal||c.nickname||c.full_name||'Cliente'}
 function renderClients(){
  let q=(document.getElementById('search')?.value||'').trim().toLowerCase();
- let list=clients.filter(c=>[c.full_name,c.identification,c.phone].some(v=>String(v||'').toLowerCase().includes(q)));
+ let list=clients.filter(c=>[c.client_number,c.first_name,c.last_name,c.nickname,c.phone,c.full_name].some(v=>String(v||'').toLowerCase().includes(q)));
  clientList.innerHTML=list.map(c=>{
    let ls=loans.filter(l=>l.client_id===c.id),bal=ls.reduce((s,l)=>s+balanceForLoan(l.id),0);
-   return `<div class="card person"><div class="avatar">${(c.full_name||'?')[0]}</div><div class="info"><b>${c.full_name}</b><small>${c.identification?`ID ${c.identification} · `:''}${c.phone?`${c.phone} · `:''}Saldo ${money(bal)}</small></div><button class="secondary" onclick="openClientFile('${c.id}')">Expediente</button></div>`;
+   const nm=clientDisplayName(c); return `<div class="card person"><div class="avatar">${(c.first_name||c.full_name||'?')[0]}</div><div class="info"><b>#${c.client_number||'—'} · ${nm}</b><small>${c.nickname&&nm!==c.nickname?`Apodo: ${c.nickname} · `:''}${c.phone?`${c.phone} · `:''}Saldo ${money(bal)}</small></div><button class="secondary" onclick="openClientFile('${c.id}')">Expediente</button></div>`;
  }).join('')||'<div class="empty">Sin clientes.</div>';
 }
 
 
 
+function openNewClient(){
+ sheet.innerHTML=`<h3>Nuevo cliente</h3><div class="sub">El número de cliente se asigna automáticamente.</div>
+ <label>Primer nombre</label><input id="ncFirst" placeholder="Opcional">
+ <label>Apellido</label><input id="ncLast" placeholder="Opcional">
+ <label>Apodo</label><input id="ncNick" placeholder="Ej. La Machita">
+ <label>Teléfono</label><input id="ncPhone" type="tel" placeholder="Teléfono">
+ <label>Dirección / referencia</label><textarea id="ncAddress" rows="2" placeholder="Dirección o punto de referencia"></textarea>
+ <label>Notas</label><textarea id="ncNotes" rows="3" placeholder="Información útil del cliente"></textarea>
+ <div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="createClient()">Guardar cliente</button></div>`;
+ modal.classList.add('show');
+}
+async function createClient(){
+ if(!['owner','admin'].includes(role)){alert('Solo el propietario o administrador puede crear clientes.');return}
+ const first=document.getElementById('ncFirst').value.trim(),last=document.getElementById('ncLast').value.trim(),nick=document.getElementById('ncNick').value.trim();
+ if(!first&&!nick){alert('Ingresa al menos el primer nombre o el apodo.');return}
+ setLoading(true);
+ const payload={first_name:first||null,last_name:last||null,nickname:nick||null,full_name:[first,last].filter(Boolean).join(' ')||nick,identification:null,phone:document.getElementById('ncPhone').value.trim()||null,address:document.getElementById('ncAddress').value.trim()||null,notes:document.getElementById('ncNotes').value.trim()||null,active:true};
+ const {data,error}=await sb.from('loans_clients').insert(payload).select().single();
+ if(error){setLoading(false);alert('No se pudo crear el cliente: '+error.message);return}
+ await loadAll();setLoading(false);closeModal();
+ const btn=[...document.querySelectorAll('.nav button')].find(b=>b.textContent.includes('Clientes'));
+ if(btn)go('clients',btn);
+ setTimeout(()=>openClientFile(data.id),100);
+}
 function clientLoans(id){return loans.filter(l=>l.client_id===id).sort((a,b)=>String(b.start_date).localeCompare(String(a.start_date)))}
 function openClientFile(id){
  const c=clients.find(x=>x.id===id); if(!c)return;
  const ls=clientLoans(id), ps=payments.filter(p=>ls.some(l=>l.id===p.loan_id)).sort((a,b)=>String(b.payment_date).localeCompare(String(a.payment_date)));
  const totalLoaned=ls.reduce((s,l)=>s+Number(l.principal||0),0),totalPaid=ps.reduce((s,p)=>s+Number(p.amount||0),0),bal=ls.reduce((s,l)=>s+balanceForLoan(l.id),0);
- sheet.innerHTML=`<h3>${c.full_name}</h3><div class="sub">Expediente del cliente</div>
+ sheet.innerHTML=`<h3>#${c.client_number||'—'} · ${clientDisplayName(c)}${c.nickname&&clientDisplayName(c)!==c.nickname?` “${c.nickname}”`:''}</h3><div class="sub">Expediente del cliente</div>
  <div class="card" style="margin-top:10px">
   <div class="receipt-line"><span>Identificación</span><b>${c.identification||'No registrada'}</b></div>
   <div class="receipt-line"><span>Teléfono</span><b>${c.phone||'No registrado'}</b></div>
@@ -337,21 +365,21 @@ function openClientFile(id){
 }
 function editClient(id){
  const c=clients.find(x=>x.id===id); if(!c)return;
- sheet.innerHTML=`<h3>Editar cliente</h3>
- <label>Nombre completo</label><input id="ecName" value="${String(c.full_name||'').replace(/"/g,'&quot;')}">
- <label>Identificación</label><input id="ecId" value="${String(c.identification||'').replace(/"/g,'&quot;')}" placeholder="Cédula / identificación">
+ sheet.innerHTML=`<h3>Editar cliente #${c.client_number||'—'}</h3>
+ <label>Primer nombre</label><input id="ecFirst" value="${String(c.first_name||'').replace(/"/g,'&quot;')}">
+ <label>Apellido</label><input id="ecLast" value="${String(c.last_name||'').replace(/"/g,'&quot;')}">
+ <label>Apodo</label><input id="ecNick" value="${String(c.nickname||'').replace(/"/g,'&quot;')}" placeholder="Opcional">
  <label>Teléfono</label><input id="ecPhone" value="${String(c.phone||'').replace(/"/g,'&quot;')}" placeholder="8888-8888">
  <label>Dirección / referencia</label><textarea id="ecAddress" rows="3" placeholder="Dirección o punto de referencia">${c.address||''}</textarea>
  <label>Notas</label><textarea id="ecNotes" rows="3" placeholder="Información útil del cliente">${c.notes||''}</textarea>
  <div class="actions"><button class="secondary" onclick="openClientFile('${id}')">Cancelar</button><button class="primary" onclick="saveClient('${id}')">Guardar cambios</button></div>`;
 }
 async function saveClient(id){
- const name=document.getElementById('ecName').value.trim();
- if(!name){alert('El nombre del cliente es obligatorio.');return}
+ const first=document.getElementById('ecFirst').value.trim(),last=document.getElementById('ecLast').value.trim(),nick=document.getElementById('ecNick').value.trim();
+ if(!first&&!nick){alert('Ingresa al menos el primer nombre o el apodo.');return}
  setLoading(true);
  const {error}=await sb.from('loans_clients').update({
-  full_name:name,
-  identification:document.getElementById('ecId').value.trim()||null,
+  first_name:first||null,last_name:last||null,nickname:nick||null,full_name:[first,last].filter(Boolean).join(' ')||nick,identification:null,
   phone:document.getElementById('ecPhone').value.trim()||null,
   address:document.getElementById('ecAddress').value.trim()||null,
   notes:document.getElementById('ecNotes').value.trim()||null
@@ -363,15 +391,30 @@ function inRange(date,from,to){const d=String(date||'').slice(0,10);return d&&d>
 function isoLocalDate(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function prettyDate(s){if(!s)return '';const [y,m,d]=s.split('-');return `${d}/${m}/${y}`}
 function periodLabel(from,to){return `${prettyDate(from)} al ${prettyDate(to)}`}
+function firstSaturday(year,month){
+ const d=new Date(year,month,1),add=(6-d.getDay()+7)%7;
+ return new Date(year,month,1+add);
+}
 function setReportPeriod(which){
  const now=new Date(),fromEl=document.getElementById('reportFrom'),toEl=document.getElementById('reportTo');
  let a,b;
- if(which==='previous'){
-   a=new Date(now.getFullYear(),now.getMonth()-1,1);
-   b=new Date(now.getFullYear(),now.getMonth(),0);
+ if(which==='week'){
+   b=now;a=new Date(now);a.setDate(a.getDate()-6);
+ }else if(which==='fortnight'){
+   b=now;a=new Date(now);a.setDate(a.getDate()-14);
+ }else if(which==='month'){
+   a=new Date(now.getFullYear(),now.getMonth(),1);b=now;
+ }else if(which==='closing'){
+   const thisClose=firstSaturday(now.getFullYear(),now.getMonth());
+   if(now>=thisClose){
+     a=thisClose;
+     b=firstSaturday(now.getFullYear(),now.getMonth()+1);
+   }else{
+     a=firstSaturday(now.getFullYear(),now.getMonth()-1);
+     b=thisClose;
+   }
  }else{
-   a=new Date(now.getFullYear(),now.getMonth(),1);
-   b=now;
+   a=new Date(now.getFullYear(),now.getMonth(),1);b=now;
  }
  fromEl.value=isoLocalDate(a);toEl.value=isoLocalDate(b);
  document.getElementById('customReportDates').style.display='none';
@@ -394,7 +437,10 @@ function reportData(){
  const portfolio=loans.filter(l=>['active','refinanced'].includes(l.status)).reduce((s,l)=>s+balanceForLoan(l.id),0);
  const available=cashMovements.reduce((s,m)=>s+Number(m.amount||0),0);
  const cashResult=collected-spent-placed;
- return {from,to,rLoans,rPayments,rExpenses,rCapital,placed,collected,spent,capital,portfolio,available,cashResult};
+ const activeNow=loans.filter(l=>l.status==='active').length;
+ const paidInPeriod=rLoans.filter(l=>l.status==='paid').length;
+ const refinancedInPeriod=rLoans.filter(l=>l.status==='refinanced').length;
+ return {from,to,rLoans,rPayments,rExpenses,rCapital,placed,collected,spent,capital,portfolio,available,cashResult,activeNow,paidInPeriod,refinancedInPeriod};
 }
 function reportCard(label,value,note=''){
  return `<div class="stat"><small>${label}</small><b>${money(value)}</b>${note?`<div class="sub" style="margin-top:4px">${note}</div>`:''}</div>`;
@@ -416,6 +462,10 @@ function renderReport(){
     ${reportCard('Capital aportado',r.capital,'Dinero puesto por el propietario; no es ganancia')}
     ${reportCard('Cartera pendiente actual',r.portfolio)}
     ${reportCard('Disponible para prestar',r.available)}
+    <div class="stat"><small>Préstamos nuevos</small><b>${r.rLoans.length}</b></div>
+    <div class="stat"><small>Préstamos activos actuales</small><b>${r.activeNow}</b></div>
+    <div class="stat"><small>Pagados del período</small><b>${r.paidInPeriod}</b></div>
+    <div class="stat"><small>Refinanciados del período</small><b>${r.refinancedInPeriod}</b></div>
    </div>
    <div style="margin-top:12px;padding:10px;border-radius:12px;background:#f4e8dc;font-size:13px">
      <b>Lectura rápida:</b> el capital aportado se presenta por separado. El movimiento operativo de caja muestra cuánto efectivo entró o salió por cobros, gastos y préstamos entregados. Un valor negativo no significa necesariamente una pérdida: puede reflejar dinero que salió para financiar nuevos préstamos.
@@ -634,9 +684,22 @@ function openPaymentReceipt(paymentId){
 function receiptText(r){
  return `CARTERA 24\nRecibo ${r.no}\nCliente: ${r.c.full_name||'Cliente'}\nFecha: ${fmtDate(r.p.payment_date)}\nForma de pago: ${r.p.payment_method==='sinpe'?'SINPE':'Efectivo'}\nSaldo anterior: ${money(r.before)}\nAbono recibido: ${money(r.p.amount)}\nNuevo saldo: ${money(r.after)}\nCiclo: ${r.cy?.cycle_number||1}\n\nGracias por su pago.`;
 }
+function whatsappNumber(raw){
+ let n=String(raw||'').replace(/\D/g,'');
+ if(!n)return '';
+ // En Costa Rica, si guardan solo los 8 dígitos, agrega automáticamente +506.
+ if(n.length===8)n='506'+n;
+ return n;
+}
 function shareReceiptWhatsApp(paymentId){
  const r=receiptData(paymentId);if(!r)return;
- window.open('https://wa.me/?text='+encodeURIComponent(receiptText(r)),'_blank');
+ const phone=whatsappNumber(r.c.phone);
+ const text=encodeURIComponent(receiptText(r));
+ if(phone){
+   window.open(`https://wa.me/${phone}?text=${text}`,'_blank');
+ }else{
+   window.open(`https://wa.me/?text=${text}`,'_blank');
+ }
 }
 async function receiptCanvas(r){
  const scale=2,w=720,h=760,c=document.createElement('canvas');c.width=w*scale;c.height=h*scale;
@@ -686,7 +749,7 @@ function openPhysicalCardImport(){
  <label>Dirección / referencia (opcional)</label><textarea id="legacyAddress" rows="2"></textarea>
  <div class="row"><div><label>Valor original ₡</label><input id="legacyPrincipal" type="number"></div><div><label>Saldo actual confirmado ₡</label><input id="legacyBalance" type="number"></div></div>
  <div class="row"><div><label>Cuota esperada ₡</label><input id="legacyPayment" type="number"></div><div><label>Fecha de inicio</label><input id="legacyStart" type="date"></div></div>
- <div class="row"><div><label>Frecuencia</label><select id="legacyFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select></div><div><label>Cobrador</label><select id="legacyCollector"><option value="">Sin asignar / Iker</option>${active.map(c=>`<option value="${c.user_id}">${c.full_name}</option>`).join('')}</select></div></div>
+ <div class="row"><div><label>Frecuencia</label><select id="legacyFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select></div><div><label>Cobrador</label><select id="legacyCollector"><option value="">Sin asignar / Iker</option>${active.map(c=>`<option value="${c.user_id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select></div></div>
  <label>Notas (opcional)</label><textarea id="legacyNotes" rows="2" placeholder="Observaciones de la tarjeta"></textarea>
  <div class="card" style="margin-top:12px"><b>Importante</b><div class="sub">Esta migración registra el saldo actual confirmado como saldo de apertura. No vuelve a sumar 20% ni crea movimientos de caja por dinero que ya fue entregado anteriormente.</div></div>
  <div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="savePhysicalCardImport()">Confirmar migración</button></div>`;
@@ -743,7 +806,7 @@ async function savePhysicalCardImport(){
  closeModal();await loadAll();go('loans',document.querySelectorAll('.nav button')[1]);alert('Tarjeta migrada correctamente. Revise el saldo antes de continuar con cobros.');
 }
 
-function openNewLoan(){const active=collectors.filter(c=>c.active);sheet.innerHTML=`<h3>Nuevo préstamo</h3><label>Cliente</label><select id="existingClient"><option value="">＋ Cliente nuevo</option>${clients.map(c=>`<option value="${c.id}">${c.full_name}</option>`).join('')}</select><label>Nombre del cliente nuevo</label><input id="newName" placeholder="Nombre completo"><label>Identificación (opcional)</label><input id="newIdentification" placeholder="Cédula / identificación"><label>Teléfono (opcional)</label><input id="newPhone" placeholder="8888-8888"><label>Dirección / referencia (opcional)</label><textarea id="newAddress" rows="2" placeholder="Dirección o punto de referencia"></textarea><label>Notas del cliente (opcional)</label><textarea id="newClientNotes" rows="2" placeholder="Información útil"></textarea><label>Monto entregado</label><input id="newPrincipal" type="number" placeholder="100000" oninput="calcNew()"><div class="row"><div><label>Interés</label><input value="20%" disabled></div><div><label>Total a cobrar</label><input id="newTotal" disabled></div></div><div class="row"><div><label>Plazo</label><input value="24 días" disabled></div><div><label>Frecuencia</label><select id="newFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select></div></div><label>Monto esperado por cobro</label><input id="newPayment" type="number" placeholder="5000"><label>Cobrador asignado</label><select id="newCollector"><option value="">Sin asignar / Iker</option>${active.map(c=>`<option value="${c.user_id}">${c.full_name}</option>`).join('')}</select><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveLoan()">Crear préstamo</button></div>`;modal.classList.add('show')}
+function openNewLoan(){const active=collectors.filter(c=>c.active);sheet.innerHTML=`<h3>Nuevo préstamo</h3><label>Cliente</label><select id="existingClient"><option value="">＋ Cliente nuevo</option>${clients.map(c=>`<option value="${c.id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select><label>Nombre del cliente nuevo</label><input id="newName" placeholder="Nombre completo"><label>Identificación (opcional)</label><input id="newIdentification" placeholder="Cédula / identificación"><label>Teléfono (opcional)</label><input id="newPhone" placeholder="8888-8888"><label>Dirección / referencia (opcional)</label><textarea id="newAddress" rows="2" placeholder="Dirección o punto de referencia"></textarea><label>Notas del cliente (opcional)</label><textarea id="newClientNotes" rows="2" placeholder="Información útil"></textarea><label>Monto entregado</label><input id="newPrincipal" type="number" placeholder="100000" oninput="calcNew()"><div class="row"><div><label>Interés</label><input value="20%" disabled></div><div><label>Total a cobrar</label><input id="newTotal" disabled></div></div><div class="row"><div><label>Plazo</label><input value="24 días" disabled></div><div><label>Frecuencia</label><select id="newFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select></div></div><label>Monto esperado por cobro</label><input id="newPayment" type="number" placeholder="5000"><label>Cobrador asignado</label><select id="newCollector"><option value="">Sin asignar / Iker</option>${active.map(c=>`<option value="${c.user_id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveLoan()">Crear préstamo</button></div>`;modal.classList.add('show')}
 function calcNew(){newTotal.value=money(Number(newPrincipal.value||0)*1.2)}
 async function saveLoan(){let p=Number(newPrincipal.value),pay=Number(newPayment.value),clientId=existingClient.value;if(!p||!pay){alert('Complete monto y cobro esperado.');return}setLoading(true);if(!clientId){let name=newName.value.trim();if(!name){setLoading(false);alert('Indique el cliente.');return}const {data:c,error}=await sb.from('loans_clients').insert({full_name:name,identification:newIdentification.value.trim()||null,phone:newPhone.value.trim()||null,address:newAddress.value.trim()||null,notes:newClientNotes.value.trim()||null}).select().single();if(error){setLoading(false);alert(error.message);return}clientId=c.id}const collectorId=newCollector.value||null;const collector=collectors.find(c=>c.user_id===collectorId);const {data:l,error}=await sb.from('loans_loans').insert({client_id:clientId,principal:p,interest_rate:20,term_days:24,start_date:todayISO(),collection_frequency:newFreq.value,expected_payment:pay,collector_id:collectorId,collector_name_snapshot:collector?.full_name||null,created_by:session.user.id}).select().single();if(error){setLoading(false);alert(error.message);return}if(collectorId)await sb.from('loans_collector_history').insert({loan_id:l.id,collector_id:collectorId,collector_name:collector.full_name,assigned_by:session.user.id});await sb.from('loans_cash_movements').insert({movement_type:'loan_disbursement',amount:-p,loan_id:l.id,created_by:session.user.id});closeModal();await loadAll();setLoading(false);go('loans',document.querySelectorAll('.nav button')[1])}
 function openCapital(){const hasInitial=capitalContributions.some(x=>x.contribution_type==='initial');sheet.innerHTML=`<h3>Registrar capital</h3><p class="sub">Este dinero aumenta el disponible para prestar y queda registrado en el historial.</p><label>Tipo</label><select id="capitalType">${hasInitial?'':'<option value="initial">Capital inicial</option>'}<option value="additional">Aporte adicional</option></select><label>Monto</label><input id="capitalAmount" type="number" min="1" placeholder="Ej. 500000"><label>Fecha</label><input id="capitalDate" type="date" value="${todayISO()}"><label>Nota (opcional)</label><input id="capitalNotes" placeholder="Ej. Capital de arranque"><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveCapital()">Guardar capital</button></div>`;modal.classList.add('show')}
