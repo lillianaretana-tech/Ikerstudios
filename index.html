@@ -47,6 +47,11 @@ input,select{width:100%;border:1px solid #d9c7b5;background:#fff;border-radius:1
 .modal{position:fixed;inset:0;background:rgba(25,20,17,.56);z-index:20;display:none;align-items:flex-end;justify-content:center}.modal.show{display:flex}.sheet{width:min(520px,100%);background:var(--paper);border-radius:24px 24px 0 0;padding:20px;max-height:88vh;overflow:auto}
 .sheet h3{margin:0 0 5px}.actions{display:flex;gap:8px;margin-top:14px}.actions button{flex:1}
 .receipt{border:1px dashed #b9987e;padding:15px;border-radius:14px;background:#fff;margin-top:12px}.receipt h3{text-align:center}.receipt-line{display:flex;justify-content:space-between;margin:7px 0}
+.receipt-brand{text-align:center;border-bottom:1px dashed #cdb39e;padding-bottom:10px;margin-bottom:10px}
+.receipt-brand b{font-size:20px;color:var(--copper2)}.receipt-brand small{display:block;color:var(--muted);margin-top:3px}
+.receipt-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+@media(max-width:390px){.receipt-actions{grid-template-columns:1fr}}
+
 .empty{color:var(--muted);text-align:center;padding:24px}
 footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
 .role-note{font-size:12px;color:var(--muted);margin-top:6px}.collector-row{display:flex;align-items:center;gap:10px;margin-top:10px}.collector-row .info{min-width:0}.collector-actions{display:flex;gap:6px;flex-wrap:wrap}.owner-only{}
@@ -100,7 +105,10 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
 </section>
 
 <section id="loans" class="view">
- <button class="primary big owner-only" onclick="openNewLoan()">＋ Nuevo préstamo</button>
+ <div class="owner-only" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+  <button class="primary big" onclick="openNewLoan()">＋ Nuevo préstamo</button>
+  <button class="secondary big" onclick="openPhysicalCardImport()">📷 Migrar tarjeta física</button>
+ </div>
  <div class="section-title"><h2>Créditos activos</h2><span class="sub" id="loanCount"></span></div>
  <div id="loanList"></div>
 </section>
@@ -563,8 +571,12 @@ function freqLabel(v){return ({daily:'Diario',weekly:'Semanal',custom:'Personali
 
 function openLoanHistory(id){
  const l=loans.find(x=>x.id===id),c=clientFor(l.client_id),list=cycles.filter(x=>x.loan_id===id).sort((a,b)=>Number(a.cycle_number)-Number(b.cycle_number));
+ const ps=payments.filter(p=>p.loan_id===id).sort((a,b)=>String(b.payment_date).localeCompare(String(a.payment_date)));
  sheet.innerHTML=`<h3>${c.full_name}</h3><div class="sub">Historial del crédito</div>
+ ${l.source_type==='physical_card'?`<span class="pill" style="margin-top:8px">MIGRADO DE TARJETA</span>`:''}
  ${list.map(cy=>{const paid=cyclePaid(cy.id),rem=Math.max(0,Number(cy.amount_due)-paid);return `<div class="card" style="margin-top:10px"><b>Ciclo ${cy.cycle_number}</b><div class="sub">${fmtDate(cy.start_date)} → ${fmtDate(cy.due_date)}</div><div style="margin-top:6px">Base: <b>${money(cy.opening_principal)}</b> · Interés: <b>${Number(cy.interest_rate)}%</b></div><div>Total ciclo: <b>${money(cy.amount_due)}</b> · Pagado: <b>${money(paid)}</b> · Saldo: <b>${money(rem)}</b></div><div class="sub">Estado: ${cy.status==='active'?'Activo':cy.status==='refinanced'?'Refinanciado':'Pagado'}</div></div>`}).join('')}
+ <h4 style="margin-bottom:6px">Abonos</h4>
+ ${ps.length?ps.map(p=>`<div class="card" style="margin-top:8px"><div class="receipt-line"><span>${fmtDate(p.payment_date)} · ${p.payment_method==='sinpe'?'SINPE':'Efectivo'}</span><b>${money(p.amount)}</b></div><button class="secondary big" style="margin-top:6px" onclick="openPaymentReceipt('${p.id}')">Ver / compartir recibo</button></div>`).join(''):'<div class="sub">Sin abonos registrados.</div>'}
  <div class="actions"><button class="secondary" onclick="closeModal()">Cerrar</button></div>`;
  modal.classList.add('show');
 }
@@ -582,9 +594,123 @@ async function confirmRefinance(id){
  openLoanHistory(id);
 }
 function openPay(id){let l=loans.find(x=>x.id===id),c=clientFor(l.client_id),bal=balanceForLoan(id),remaining=pendingTodayForLoan(l);if(remaining<=0){alert('El cobro esperado de hoy ya fue completado.');return}sheet.innerHTML=`<h3>Registrar cobro</h3><div class="sub">${c.full_name} · saldo ${money(bal)}</div><label>Monto recibido</label><input id="payAmount" type="number" value="${remaining}"><div class="sub">Pendiente esperado hoy: ${money(remaining)}</div><label>Forma de pago</label><select id="payMethod"><option value="cash">Efectivo</option><option value="sinpe">SINPE</option></select><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="pay('${id}')">Confirmar pago</button></div>`;modal.classList.add('show')}
-async function pay(id){let l=loans.find(x=>x.id===id),cy=cycleFor(id),bal=balanceForLoan(id),a=Number(payAmount.value);if(!a||a<=0||a>bal){alert('Revise el monto recibido.');return}setLoading(true);const {data:p,error}=await sb.from('loans_payments').insert({loan_id:id,cycle_id:cy.id,amount:a,payment_date:todayISO(),payment_method:payMethod.value,received_by:session.user.id,created_by:session.user.id}).select().single();if(error){setLoading(false);alert(error.message);return}if(payMethod.value==='cash')await sb.from('loans_cash_movements').insert({movement_type:'payment',amount:a,loan_id:id,payment_id:p.id,created_by:session.user.id});await loadAll();setLoading(false);let nb=balanceForLoan(id);sheet.innerHTML=`<h3>✓ Pago registrado</h3><div class="receipt"><h3>RECIBO DE PAGO</h3><div class="receipt-line"><span>Cliente</span><b>${clientFor(l.client_id).full_name}</b></div><div class="receipt-line"><span>Abono</span><b>${money(a)}</b></div><div class="receipt-line"><span>Saldo</span><b>${money(nb)}</b></div><div class="receipt-line"><span>Fecha</span><b>${fmtDate(todayISO())}</b></div></div><button class="secondary big" style="margin-top:8px" onclick="closeModal()">Cerrar</button>`}
+
+function receiptNumber(p){return 'C24-'+String(p.payment_date||todayISO()).slice(0,10).replaceAll('-','')+'-'+String(p.id||'').replaceAll('-','').slice(0,6).toUpperCase()}
+function receiptData(paymentId){
+ const p=payments.find(x=>x.id===paymentId);if(!p)return null;
+ const l=loans.find(x=>x.id===p.loan_id);if(!l)return null;
+ const c=clientFor(l.client_id),cy=cycles.find(x=>x.id===p.cycle_id)||cycleFor(l.id);
+ const cyclePayments=payments.filter(x=>x.cycle_id===p.cycle_id).sort((a,b)=>String(a.created_at||a.payment_date).localeCompare(String(b.created_at||b.payment_date)));
+ const idx=cyclePayments.findIndex(x=>x.id===p.id);
+ const beforePaid=cyclePayments.slice(0,idx<0?0:idx).reduce((s,x)=>s+Number(x.amount||0),0);
+ const before=Math.max(0,Number(cy?.amount_due||0)-beforePaid),after=Math.max(0,before-Number(p.amount||0));
+ return {p,l,c,cy,before,after,no:receiptNumber(p)};
+}
+function receiptHTML(r){
+ return `<div class="receipt" id="receiptCard">
+   <div class="receipt-brand"><b>CARTERA 24</b><small>Comprobante de pago</small></div>
+   <div class="receipt-line"><span>Recibo</span><b>${r.no}</b></div>
+   <div class="receipt-line"><span>Cliente</span><b>${r.c.full_name||'Cliente'}</b></div>
+   <div class="receipt-line"><span>Fecha</span><b>${fmtDate(r.p.payment_date)}</b></div>
+   <div class="receipt-line"><span>Forma de pago</span><b>${r.p.payment_method==='sinpe'?'SINPE':'Efectivo'}</b></div>
+   <div class="receipt-line"><span>Saldo anterior</span><b>${money(r.before)}</b></div>
+   <div class="receipt-line"><span>Abono recibido</span><b>${money(r.p.amount)}</b></div>
+   <div class="receipt-line"><span>Nuevo saldo</span><b>${money(r.after)}</b></div>
+   <div class="receipt-line"><span>Ciclo</span><b>${r.cy?.cycle_number||1}</b></div>
+   <div style="text-align:center;margin-top:12px;font-size:11px;color:var(--muted)">Gracias por su pago · LillyTech / 3RS Integrated Solutions</div>
+ </div>`;
+}
+function openPaymentReceipt(paymentId){
+ const r=receiptData(paymentId);if(!r){alert('No se encontró el pago.');return}
+ sheet.innerHTML=`<h3>Recibo de pago</h3>${receiptHTML(r)}
+ <div class="receipt-actions">
+  <button class="primary" onclick="shareReceiptWhatsApp('${paymentId}')">WhatsApp</button>
+  <button class="secondary" onclick="shareReceiptImage('${paymentId}')">Compartir / guardar imagen</button>
+  <button class="secondary" onclick="printPaymentReceipt('${paymentId}')">PDF / Imprimir</button>
+  <button class="secondary" onclick="closeModal()">Cerrar</button>
+ </div>`;
+ modal.classList.add('show');
+}
+function receiptText(r){
+ return `CARTERA 24\nRecibo ${r.no}\nCliente: ${r.c.full_name||'Cliente'}\nFecha: ${fmtDate(r.p.payment_date)}\nForma de pago: ${r.p.payment_method==='sinpe'?'SINPE':'Efectivo'}\nSaldo anterior: ${money(r.before)}\nAbono recibido: ${money(r.p.amount)}\nNuevo saldo: ${money(r.after)}\nCiclo: ${r.cy?.cycle_number||1}\n\nGracias por su pago.`;
+}
+function shareReceiptWhatsApp(paymentId){
+ const r=receiptData(paymentId);if(!r)return;
+ window.open('https://wa.me/?text='+encodeURIComponent(receiptText(r)),'_blank');
+}
+async function receiptCanvas(r){
+ const scale=2,w=720,h=760,c=document.createElement('canvas');c.width=w*scale;c.height=h*scale;
+ const x=c.getContext('2d');x.scale(scale,scale);x.fillStyle='#fffaf3';x.fillRect(0,0,w,h);
+ x.fillStyle='#3a2923';x.fillRect(0,0,w,115);x.fillStyle='#fff';x.textAlign='center';x.font='bold 34px Arial';x.fillText('CARTERA 24',w/2,52);
+ x.font='18px Arial';x.fillText('COMPROBANTE DE PAGO',w/2,84);x.textAlign='left';
+ const rows=[['Recibo',r.no],['Cliente',r.c.full_name||'Cliente'],['Fecha',fmtDate(r.p.payment_date)],['Forma de pago',r.p.payment_method==='sinpe'?'SINPE':'Efectivo'],['Saldo anterior',money(r.before)],['Abono recibido',money(r.p.amount)],['Nuevo saldo',money(r.after)],['Ciclo',String(r.cy?.cycle_number||1)]];
+ let y=160;x.font='20px Arial';
+ rows.forEach(([a,b],i)=>{x.fillStyle='#756a63';x.fillText(a,48,y);x.fillStyle='#292421';x.font=(i===5||i===6?'bold 24px Arial':'bold 20px Arial');x.textAlign='right';x.fillText(b,w-48,y);x.textAlign='left';x.font='20px Arial';x.strokeStyle='#e1d1c3';x.beginPath();x.moveTo(48,y+18);x.lineTo(w-48,y+18);x.stroke();y+=66});
+ x.fillStyle='#756a63';x.textAlign='center';x.font='16px Arial';x.fillText('Gracias por su pago',w/2,h-58);x.fillText('LillyTech · 3RS Integrated Solutions',w/2,h-30);
+ return c;
+}
+async function shareReceiptImage(paymentId){
+ const r=receiptData(paymentId);if(!r)return;const c=await receiptCanvas(r);
+ c.toBlob(async blob=>{
+   const file=new File([blob],`${r.no}.png`,{type:'image/png'});
+   try{
+    if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){await navigator.share({files:[file],title:'Recibo Cartera 24',text:`Recibo ${r.no}`});return}
+   }catch(e){if(e?.name==='AbortError')return}
+   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${r.no}.png`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+ },'image/png');
+}
+function printPaymentReceipt(paymentId){
+ const r=receiptData(paymentId);if(!r)return;const w=window.open('','_blank');
+ w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${r.no}</title><style>@page{size:A5;margin:12mm}body{font-family:Arial;color:#292421}.box{border:1px solid #cdb39e;border-radius:14px;padding:22px}.brand{text-align:center;background:#3a2923;color:#fff;padding:18px;border-radius:10px;margin-bottom:18px}.brand b{font-size:25px}.row{display:flex;justify-content:space-between;border-bottom:1px solid #eadfd4;padding:10px 0}.foot{text-align:center;color:#756a63;font-size:11px;margin-top:20px}@media print{button{display:none}}</style></head><body><div class="box"><div class="brand"><b>CARTERA 24</b><div>COMPROBANTE DE PAGO</div></div>${[['Recibo',r.no],['Cliente',r.c.full_name||'Cliente'],['Fecha',fmtDate(r.p.payment_date)],['Forma de pago',r.p.payment_method==='sinpe'?'SINPE':'Efectivo'],['Saldo anterior',money(r.before)],['Abono recibido',money(r.p.amount)],['Nuevo saldo',money(r.after)],['Ciclo',r.cy?.cycle_number||1]].map(x=>`<div class="row"><span>${x[0]}</span><b>${x[1]}</b></div>`).join('')}<div class="foot">Gracias por su pago<br>LillyTech · 3RS Integrated Solutions</div></div><button onclick="window.print()">Guardar como PDF / Imprimir</button><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);w.document.close();
+}
+async function pay(id){
+ let l=loans.find(x=>x.id===id),cy=cycleFor(id),bal=balanceForLoan(id),a=Number(payAmount.value),method=payMethod.value;
+ if(!a||a<=0||a>bal){alert('Revise el monto recibido.');return}
+ setLoading(true);
+ const {data:p,error}=await sb.from('loans_payments').insert({loan_id:id,cycle_id:cy.id,amount:a,payment_date:todayISO(),payment_method:method,received_by:session.user.id,created_by:session.user.id}).select().single();
+ if(error){setLoading(false);alert(error.message);return}
+ if(method==='cash')await sb.from('loans_cash_movements').insert({movement_type:'payment',amount:a,loan_id:id,payment_id:p.id,created_by:session.user.id});
+ await loadAll();setLoading(false);openPaymentReceipt(p.id);
+}
 function openExpense(){sheet.innerHTML=`<h3>Registrar gasto</h3><label>Concepto</label><input id="expenseConcept" placeholder="Ej. transporte"><label>Monto</label><input id="expenseAmount" type="number" placeholder="0"><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveExpense()">Guardar</button></div>`;modal.classList.add('show')}
 async function saveExpense(){let a=Number(expenseAmount.value),concept=expenseConcept.value.trim();if(!a||a<=0||!concept)return;setLoading(true);const {data:e,error}=await sb.from('loans_expenses').insert({concept,amount:a,expense_date:todayISO(),created_by:session.user.id}).select().single();if(error){setLoading(false);alert(error.message);return}await sb.from('loans_cash_movements').insert({movement_type:'expense',amount:-a,expense_id:e.id,created_by:session.user.id});closeModal();await loadAll();setLoading(false)}
+function openPhysicalCardImport(){
+ const active=collectors.filter(c=>c.active);
+ sheet.innerHTML=`<h3>📷 Migrar tarjeta física</h3>
+ <p class="sub"><b>Paso de revisión.</b> La foto sirve como referencia, pero Cartera 24 no leerá la letra automáticamente hasta conectar el servicio de IA. No guarde datos sin verificarlos contra la tarjeta.</p>
+ <label>Foto de la tarjeta</label><input id="legacyPhoto" type="file" accept="image/*" capture="environment" onchange="previewLegacyPhoto()">
+ <div id="legacyPreview" style="margin-top:10px"></div>
+ <div class="row"><div><label>Nombre completo</label><input id="legacyName"></div><div><label>Identificación (opcional)</label><input id="legacyId"></div></div>
+ <div class="row"><div><label>Teléfono (opcional)</label><input id="legacyPhone"></div><div><label>Referencia de tarjeta</label><input id="legacyRef" placeholder="Ej. Tarjeta 001"></div></div>
+ <label>Dirección / referencia (opcional)</label><textarea id="legacyAddress" rows="2"></textarea>
+ <div class="row"><div><label>Valor original ₡</label><input id="legacyPrincipal" type="number"></div><div><label>Saldo actual confirmado ₡</label><input id="legacyBalance" type="number"></div></div>
+ <div class="row"><div><label>Cuota esperada ₡</label><input id="legacyPayment" type="number"></div><div><label>Fecha de inicio</label><input id="legacyStart" type="date"></div></div>
+ <div class="row"><div><label>Frecuencia</label><select id="legacyFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select></div><div><label>Cobrador</label><select id="legacyCollector"><option value="">Sin asignar / Iker</option>${active.map(c=>`<option value="${c.user_id}">${c.full_name}</option>`).join('')}</select></div></div>
+ <label>Notas (opcional)</label><textarea id="legacyNotes" rows="2" placeholder="Observaciones de la tarjeta"></textarea>
+ <div class="card" style="margin-top:12px"><b>Importante</b><div class="sub">Esta migración registra el saldo actual confirmado como saldo de apertura. No vuelve a sumar 20% ni crea movimientos de caja por dinero que ya fue entregado anteriormente.</div></div>
+ <div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="savePhysicalCardImport()">Confirmar migración</button></div>`;
+ modal.classList.add('show');
+}
+function previewLegacyPhoto(){
+ const f=document.getElementById('legacyPhoto')?.files?.[0],box=document.getElementById('legacyPreview');if(!box)return;
+ if(!f){box.innerHTML='';return}const url=URL.createObjectURL(f);box.innerHTML=`<img src="${url}" alt="Tarjeta física" style="width:100%;max-height:330px;object-fit:contain;border-radius:14px;border:1px solid #d9c7b5;background:#fff">`;
+}
+async function savePhysicalCardImport(){
+ const name=legacyName.value.trim(),principal=Number(legacyPrincipal.value),balance=Number(legacyBalance.value),expected=Number(legacyPayment.value),start=legacyStart.value;
+ if(!name||!(principal>0)||balance<0||!(expected>0)||!start){alert('Revise nombre, valor original, saldo actual, cuota y fecha de inicio.');return}
+ if(!confirm(`¿Migrar la tarjeta de ${name}?\n\nValor original: ${money(principal)}\nSaldo actual confirmado: ${money(balance)}\n\nEsta acción NO registra una salida de caja histórica.`))return;
+ setLoading(true);
+ const {data,error}=await sb.rpc('loans_import_physical_card',{
+  p_full_name:name,p_principal:principal,p_current_balance:balance,p_expected_payment:expected,p_start_date:start,
+  p_collection_frequency:legacyFreq.value,p_collector_id:legacyCollector.value||null,p_identification:legacyId.value.trim()||null,
+  p_phone:legacyPhone.value.trim()||null,p_address:legacyAddress.value.trim()||null,p_client_notes:legacyNotes.value.trim()||null,
+  p_card_ref:legacyRef.value.trim()||null
+ });
+ setLoading(false);
+ if(error){alert('No se pudo migrar la tarjeta: '+error.message);return}
+ closeModal();await loadAll();go('loans',document.querySelectorAll('.nav button')[1]);alert('Tarjeta migrada correctamente. Revise el saldo antes de continuar con cobros.');
+}
+
 function openNewLoan(){const active=collectors.filter(c=>c.active);sheet.innerHTML=`<h3>Nuevo préstamo</h3><label>Cliente</label><select id="existingClient"><option value="">＋ Cliente nuevo</option>${clients.map(c=>`<option value="${c.id}">${c.full_name}</option>`).join('')}</select><label>Nombre del cliente nuevo</label><input id="newName" placeholder="Nombre completo"><label>Identificación (opcional)</label><input id="newIdentification" placeholder="Cédula / identificación"><label>Teléfono (opcional)</label><input id="newPhone" placeholder="8888-8888"><label>Dirección / referencia (opcional)</label><textarea id="newAddress" rows="2" placeholder="Dirección o punto de referencia"></textarea><label>Notas del cliente (opcional)</label><textarea id="newClientNotes" rows="2" placeholder="Información útil"></textarea><label>Monto entregado</label><input id="newPrincipal" type="number" placeholder="100000" oninput="calcNew()"><div class="row"><div><label>Interés</label><input value="20%" disabled></div><div><label>Total a cobrar</label><input id="newTotal" disabled></div></div><div class="row"><div><label>Plazo</label><input value="24 días" disabled></div><div><label>Frecuencia</label><select id="newFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select></div></div><label>Monto esperado por cobro</label><input id="newPayment" type="number" placeholder="5000"><label>Cobrador asignado</label><select id="newCollector"><option value="">Sin asignar / Iker</option>${active.map(c=>`<option value="${c.user_id}">${c.full_name}</option>`).join('')}</select><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveLoan()">Crear préstamo</button></div>`;modal.classList.add('show')}
 function calcNew(){newTotal.value=money(Number(newPrincipal.value||0)*1.2)}
 async function saveLoan(){let p=Number(newPrincipal.value),pay=Number(newPayment.value),clientId=existingClient.value;if(!p||!pay){alert('Complete monto y cobro esperado.');return}setLoading(true);if(!clientId){let name=newName.value.trim();if(!name){setLoading(false);alert('Indique el cliente.');return}const {data:c,error}=await sb.from('loans_clients').insert({full_name:name,identification:newIdentification.value.trim()||null,phone:newPhone.value.trim()||null,address:newAddress.value.trim()||null,notes:newClientNotes.value.trim()||null}).select().single();if(error){setLoading(false);alert(error.message);return}clientId=c.id}const collectorId=newCollector.value||null;const collector=collectors.find(c=>c.user_id===collectorId);const {data:l,error}=await sb.from('loans_loans').insert({client_id:clientId,principal:p,interest_rate:20,term_days:24,start_date:todayISO(),collection_frequency:newFreq.value,expected_payment:pay,collector_id:collectorId,collector_name_snapshot:collector?.full_name||null,created_by:session.user.id}).select().single();if(error){setLoading(false);alert(error.message);return}if(collectorId)await sb.from('loans_collector_history').insert({loan_id:l.id,collector_id:collectorId,collector_name:collector.full_name,assigned_by:session.user.id});await sb.from('loans_cash_movements').insert({movement_type:'loan_disbursement',amount:-p,loan_id:l.id,created_by:session.user.id});closeModal();await loadAll();setLoading(false);go('loans',document.querySelectorAll('.nav button')[1])}
@@ -605,7 +731,7 @@ function openReassignCollector(fromId){
 }
 async function assignLoanToCollector(loanId,collectorId){const c=collectors.find(x=>x.user_id===collectorId);if(!c||!c.active){alert('El cobrador no está activo.');return}if(!confirm('¿Asignar este crédito a '+c.full_name+'?'))return;setLoading(true);const {error}=await sb.rpc('loans_assign_collector',{p_loan_id:loanId,p_collector_id:collectorId});setLoading(false);if(error){alert(error.message);return}await loadAll();openReassignCollector(collectorId);alert('Crédito asignado correctamente.')}
 async function reassignLoan(loanId){const el=document.getElementById('re_'+loanId),to=el?.value;if(!to){alert('Seleccione el nuevo cobrador.');return}setLoading(true);const {error}=await sb.rpc('loans_assign_collector',{p_loan_id:loanId,p_collector_id:to});setLoading(false);if(error){alert(error.message);return}await loadAll();openReassignCollector(to);alert('Cartera reasignada correctamente.')}
-function openDetail(id){let l=loans.find(x=>x.id===id),c=clientFor(l.client_id),cy=cycleFor(id),ps=payments.filter(p=>p.loan_id===id);sheet.innerHTML=`<h3>${c.full_name}</h3><span class="pill">TARJETA DIGITAL</span><div class="grid"><div><small class="sub">Prestado</small><div class="balance">${money(l.principal)}</div></div><div><small class="sub">Total ciclo</small><div class="balance">${money(cy?.amount_due)}</div></div></div><div class="card"><div class="receipt-line"><span>Ciclo</span><b>${cy?.cycle_number||1}</b></div><div class="receipt-line"><span>Inicio</span><b>${fmtDate(cy?.start_date)}</b></div><div class="receipt-line"><span>Vence</span><b>${fmtDate(cy?.due_date)}</b></div><div class="receipt-line"><span>Saldo</span><b>${money(balanceForLoan(id))}</b></div>${l.collector_name_snapshot?`<div class="receipt-line"><span>Cobrador</span><b>${l.collector_name_snapshot}</b></div>`:''}</div><h4>Abonos</h4>${ps.length?ps.map(p=>`<div class="receipt-line"><span>${fmtDate(p.payment_date)}</span><b>${money(p.amount)}</b></div>`).join(''):'<div class="sub">Sin abonos.</div>'}<button class="secondary big" style="margin-top:12px" onclick="closeModal()">Cerrar</button>`;modal.classList.add('show')}
+function openDetail(id){let l=loans.find(x=>x.id===id),c=clientFor(l.client_id),cy=cycleFor(id),ps=payments.filter(p=>p.loan_id===id);sheet.innerHTML=`<h3>${c.full_name}</h3>${l.source_type==='physical_card'?'<span class="pill">MIGRADO DE TARJETA</span>':'<span class="pill">TARJETA DIGITAL</span>'}<div class="grid"><div><small class="sub">Prestado</small><div class="balance">${money(l.principal)}</div></div><div><small class="sub">Total ciclo</small><div class="balance">${money(cy?.amount_due)}</div></div></div><div class="card"><div class="receipt-line"><span>Ciclo</span><b>${cy?.cycle_number||1}</b></div><div class="receipt-line"><span>Inicio</span><b>${fmtDate(cy?.start_date)}</b></div><div class="receipt-line"><span>Vence</span><b>${fmtDate(cy?.due_date)}</b></div><div class="receipt-line"><span>Saldo</span><b>${money(balanceForLoan(id))}</b></div>${l.collector_name_snapshot?`<div class="receipt-line"><span>Cobrador</span><b>${l.collector_name_snapshot}</b></div>`:''}</div><h4>Abonos</h4>${ps.length?ps.map(p=>`<div class="receipt-line"><span>${fmtDate(p.payment_date)}</span><b>${money(p.amount)}</b></div>`).join(''):'<div class="sub">Sin abonos.</div>'}<button class="secondary big" style="margin-top:12px" onclick="closeModal()">Cerrar</button>`;modal.classList.add('show')}
 function simulateRefi(id){let l=loans.find(x=>x.id===id),cy=cycleFor(id),bal=balanceForLoan(id),nt=bal*1.2,can=todayISO()>=cy.due_date;sheet.innerHTML=`<h3>Refinanciamiento</h3><p class="sub">El nuevo ciclo se calcula únicamente sobre el saldo pendiente.</p><div class="hero"><small>Saldo pendiente</small><div class="money">${money(bal)}</div></div><div class="card" style="margin-top:10px"><div class="receipt-line"><span>Nuevo capital</span><b>${money(bal)}</b></div><div class="receipt-line"><span>20%</span><b>${money(bal*.2)}</b></div><div class="receipt-line"><span>Nuevo total</span><b>${money(nt)}</b></div><div class="receipt-line"><span>Nuevo plazo</span><b>24 días</b></div></div>${can?`<button class="primary big" style="margin-top:10px" onclick="confirmRefi('${id}')">Confirmar nuevo ciclo</button>`:`<div class="sub" style="margin-top:12px">Disponible a partir del vencimiento: ${fmtDate(cy.due_date)}.</div>`}<button class="secondary big" style="margin-top:8px" onclick="closeModal()">Cerrar</button>`;modal.classList.add('show')}
 async function confirmRefi(id){if(!confirm('¿Crear el nuevo ciclo con 20% sobre el saldo pendiente?'))return;setLoading(true);const {error}=await sb.rpc('loans_refinance_cycle',{p_loan_id:id});setLoading(false);if(error){alert(error.message);return}closeModal();await loadAll()}
 function go(id,btn){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');window.scrollTo(0,0)}
