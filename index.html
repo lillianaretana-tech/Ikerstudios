@@ -678,8 +678,9 @@ function openPhysicalCardImport(){
  const active=collectors.filter(c=>c.active);
  sheet.innerHTML=`<h3>📷 Migrar tarjeta física</h3>
  <p class="sub"><b>Paso de revisión.</b> La foto sirve como referencia, pero Cartera 24 no leerá la letra automáticamente hasta conectar el servicio de IA. No guarde datos sin verificarlos contra la tarjeta.</p>
- <label>Foto de la tarjeta</label><input id="legacyPhoto" type="file" accept="image/*" capture="environment" onchange="previewLegacyPhoto()">
+ <label>Foto de la tarjeta</label><input id="legacyPhoto" type="file" accept="image/*" capture="environment" onchange="readPhysicalCardPhoto()">
  <div id="legacyPreview" style="margin-top:10px"></div>
+ <div id="legacyAIStatus" class="role-note" style="display:none;margin-top:8px"></div>
  <div class="row"><div><label>Nombre completo</label><input id="legacyName"></div><div><label>Identificación (opcional)</label><input id="legacyId"></div></div>
  <div class="row"><div><label>Teléfono (opcional)</label><input id="legacyPhone"></div><div><label>Referencia de tarjeta</label><input id="legacyRef" placeholder="Ej. Tarjeta 001"></div></div>
  <label>Dirección / referencia (opcional)</label><textarea id="legacyAddress" rows="2"></textarea>
@@ -694,6 +695,37 @@ function openPhysicalCardImport(){
 function previewLegacyPhoto(){
  const f=document.getElementById('legacyPhoto')?.files?.[0],box=document.getElementById('legacyPreview');if(!box)return;
  if(!f){box.innerHTML='';return}const url=URL.createObjectURL(f);box.innerHTML=`<img src="${url}" alt="Tarjeta física" style="width:100%;max-height:330px;object-fit:contain;border-radius:14px;border:1px solid #d9c7b5;background:#fff">`;
+}
+async function fileToDataURL(file){return await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(file)})}
+function setLegacyField(id,value,uncertain=false){
+ const el=document.getElementById(id);if(!el||value===null||value===undefined||value==='')return;
+ el.value=value;el.style.borderColor=uncertain?'#d89b32':'';el.style.background=uncertain?'#fff7e6':'';
+}
+async function readPhysicalCardPhoto(){
+ previewLegacyPhoto();
+ const f=document.getElementById('legacyPhoto')?.files?.[0],st=document.getElementById('legacyAIStatus');if(!f||!st)return;
+ st.style.display='block';st.textContent='✨ Leyendo la tarjeta…';st.style.color='';
+ try{
+   const image=await fileToDataURL(f);
+   const {data,error}=await sb.functions.invoke('read-loan-card',{body:{image,mime_type:f.type||'image/jpeg'}});
+   if(error)throw error;
+   if(data?.needs_configuration){st.innerHTML='La lectura automática ya está preparada, pero falta activar la clave del servicio de IA en Supabase. Puede revisar los datos manualmente mientras se activa.';st.style.color='#9a5a20';return}
+   if(data?.error)throw new Error(data.error);
+   const d=data?.card||data||{};
+   const uncertain=new Set(d.uncertain_fields||[]);
+   setLegacyField('legacyName',d.full_name,uncertain.has('full_name'));
+   setLegacyField('legacyId',d.identification,uncertain.has('identification'));
+   setLegacyField('legacyPhone',d.phone,uncertain.has('phone'));
+   setLegacyField('legacyAddress',d.address,uncertain.has('address'));
+   setLegacyField('legacyPrincipal',d.original_value,uncertain.has('original_value'));
+   setLegacyField('legacyBalance',d.current_balance,uncertain.has('current_balance'));
+   setLegacyField('legacyPayment',d.expected_payment,uncertain.has('expected_payment'));
+   setLegacyField('legacyStart',d.start_date,uncertain.has('start_date'));
+   if(d.card_ref)setLegacyField('legacyRef',d.card_ref,false);
+   if(d.notes)setLegacyField('legacyNotes',d.notes,false);
+   st.innerHTML=uncertain.size?`✓ Lectura terminada. <b>Revise los campos amarillos</b>: la IA no está completamente segura de esos datos.`:'✓ Tarjeta leída. Revise los datos y confirme la migración.';
+   st.style.color=uncertain.size?'#9a5a20':'#35633b';
+ }catch(e){console.error(e);st.textContent='No pude leer esta foto automáticamente. Puede intentar otra foto más clara o revisar los datos manualmente.';st.style.color='#9a3e2c'}
 }
 async function savePhysicalCardImport(){
  const name=legacyName.value.trim(),principal=Number(legacyPrincipal.value),balance=Number(legacyBalance.value),expected=Number(legacyPayment.value),start=legacyStart.value;
