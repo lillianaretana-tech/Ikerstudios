@@ -750,7 +750,7 @@ function openPhysicalCardImport(){
  <div class="row"><div><label>Valor original ₡</label><input id="legacyPrincipal" type="number"></div><div><label>Saldo actual confirmado ₡</label><input id="legacyBalance" type="number"></div></div>
  <div class="row"><div><label>Cuota esperada ₡</label><input id="legacyPayment" type="number"></div><div><label>Fecha de inicio</label><input id="legacyStart" type="date"></div></div>
  <div class="row"><div><label>Frecuencia</label><select id="legacyFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select></div><div><label>Cobrador</label><select id="legacyCollector"><option value="">Sin asignar / Iker</option>${active.map(c=>`<option value="${c.user_id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select></div></div>
- <label>Notas (opcional)</label><textarea id="legacyNotes" rows="2" placeholder="Observaciones de la tarjeta"></textarea>
+ <label>Notas (opcional)</label><textarea id="legacyNotes" rows="6" placeholder="Observaciones de la tarjeta" style="min-height:150px"></textarea>
  <div class="card" style="margin-top:12px"><b>Importante</b><div class="sub">Esta migración registra el saldo actual confirmado como saldo de apertura. No vuelve a sumar 20% ni crea movimientos de caja por dinero que ya fue entregado anteriormente.</div></div>
  <div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="savePhysicalCardImport()">Confirmar migración</button></div>`;
  modal.classList.add('show');
