@@ -759,25 +759,7 @@ function previewLegacyPhoto(){
  const f=document.getElementById('legacyPhoto')?.files?.[0],box=document.getElementById('legacyPreview');if(!box)return;
  if(!f){box.innerHTML='';return}const url=URL.createObjectURL(f);box.innerHTML=`<img src="${url}" alt="Tarjeta física" style="width:100%;max-height:330px;object-fit:contain;border-radius:14px;border:1px solid #d9c7b5;background:#fff">`;
 }
-async function fileToDataURL(file){
- return await new Promise((resolve,reject)=>{
-  const r=new FileReader();
-  r.onerror=reject;
-  r.onload=()=>{
-   const img=new Image();
-   img.onerror=reject;
-   img.onload=()=>{
-    const max=1600,scale=Math.min(1,max/Math.max(img.width,img.height));
-    const c=document.createElement('canvas');
-    c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);
-    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-    resolve(c.toDataURL('image/jpeg',0.84));
-   };
-   img.src=r.result;
-  };
-  r.readAsDataURL(file);
- })
-}
+async function fileToDataURL(file){return await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(file)})}
 function setLegacyField(id,value,uncertain=false){
  const el=document.getElementById(id);if(!el||value===null||value===undefined||value==='')return;
  el.value=value;el.style.borderColor=uncertain?'#d89b32':'';el.style.background=uncertain?'#fff7e6':'';
