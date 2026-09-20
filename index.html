@@ -750,7 +750,7 @@ function openPhysicalCardImport(){
  <div class="row"><div><label>Valor original ₡</label><input id="legacyPrincipal" type="number"></div><div><label>Saldo actual confirmado ₡</label><input id="legacyBalance" type="number"></div></div>
  <div class="row"><div><label>Cuota esperada ₡</label><input id="legacyPayment" type="number"></div><div><label>Fecha de inicio</label><input id="legacyStart" type="date"></div></div>
  <div class="row"><div><label>Frecuencia</label><select id="legacyFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select></div><div><label>Cobrador</label><select id="legacyCollector"><option value="">Sin asignar / Iker</option>${active.map(c=>`<option value="${c.user_id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select></div></div>
- <label>Notas (opcional)</label><textarea id="legacyNotes" rows="6" placeholder="Observaciones de la tarjeta" style="min-height:150px"></textarea>
+ <label>Notas (opcional)</label><textarea id="legacyNotes" rows="6" style="min-height:150px" placeholder="Observaciones de la tarjeta"></textarea>
  <div class="card" style="margin-top:12px"><b>Importante</b><div class="sub">Esta migración registra el saldo actual confirmado como saldo de apertura. No vuelve a sumar 20% ni crea movimientos de caja por dinero que ya fue entregado anteriormente.</div></div>
  <div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="savePhysicalCardImport()">Confirmar migración</button></div>`;
  modal.classList.add('show');
@@ -759,7 +759,25 @@ function previewLegacyPhoto(){
  const f=document.getElementById('legacyPhoto')?.files?.[0],box=document.getElementById('legacyPreview');if(!box)return;
  if(!f){box.innerHTML='';return}const url=URL.createObjectURL(f);box.innerHTML=`<img src="${url}" alt="Tarjeta física" style="width:100%;max-height:330px;object-fit:contain;border-radius:14px;border:1px solid #d9c7b5;background:#fff">`;
 }
-async function fileToDataURL(file){return await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(file)})}
+async function fileToDataURL(file){
+ return await new Promise((resolve,reject)=>{
+  const r=new FileReader();
+  r.onerror=reject;
+  r.onload=()=>{
+   const img=new Image();
+   img.onerror=reject;
+   img.onload=()=>{
+    const max=1600,scale=Math.min(1,max/Math.max(img.width,img.height));
+    const c=document.createElement('canvas');
+    c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+    resolve(c.toDataURL('image/jpeg',0.84));
+   };
+   img.src=r.result;
+  };
+  r.readAsDataURL(file);
+ })
+}
 function setLegacyField(id,value,uncertain=false){
  const el=document.getElementById(id);if(!el||value===null||value===undefined||value==='')return;
  el.value=value;el.style.borderColor=uncertain?'#d89b32':'';el.style.background=uncertain?'#fff7e6':'';
@@ -788,7 +806,7 @@ async function readPhysicalCardPhoto(){
    if(d.notes)setLegacyField('legacyNotes',d.notes,false);
    st.innerHTML=uncertain.size?`✓ Lectura terminada. <b>Revise los campos amarillos</b>: la IA no está completamente segura de esos datos.`:'✓ Tarjeta leída. Revise los datos y confirme la migración.';
    st.style.color=uncertain.size?'#9a5a20':'#35633b';
- }catch(e){console.error(e);st.textContent='No pude leer esta foto automáticamente. Puede intentar otra foto más clara o revisar los datos manualmente.';st.style.color='#9a3e2c'}
+ }catch(e){console.error(e);st.textContent=(e?.message&&String(e.message).includes('tardó demasiado'))?'La lectura tardó demasiado. Intente nuevamente con una foto más clara.':'No pude leer esta foto automáticamente. Puede intentar otra foto más clara o revisar los datos manualmente.';st.style.color='#9a3e2c'}
 }
 async function savePhysicalCardImport(){
  const name=legacyName.value.trim(),principal=Number(legacyPrincipal.value),balance=Number(legacyBalance.value),expected=Number(legacyPayment.value),start=legacyStart.value;
