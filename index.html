@@ -98,6 +98,8 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
   <div class="stat"><small>Cobrado hoy</small><b id="collected">₡0</b></div>
   <div class="stat"><small>Pendiente hoy</small><b id="pending">₡0</b></div>
   <div class="stat"><small>Gastos hoy</small><b id="expenses">₡0</b></div>
+  <div class="stat"><small>Créditos nuevos hoy</small><b id="loansTodayCount">0</b></div>
+  <div class="stat"><small>Colocado hoy</small><b id="loansTodayAmount">₡0</b></div>
  </div>
  <button class="primary big owner-only" onclick="openExpense()">＋ Registrar gasto</button>
  <div class="section-title"><h2>Cobros de hoy</h2><span class="sub" id="countToday"></span></div>
@@ -154,7 +156,11 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
    <div><label>Hasta</label><input id="reportTo" type="date"></div>
   </div>
 
-  <button class="primary full" style="margin-top:14px;padding:14px" onclick="renderReport()">Generar reporte</button>
+  <div class="actions" style="margin-top:14px;gap:10px;flex-wrap:wrap">
+   <button class="primary" style="min-width:150px;flex:1;padding:14px" onclick="renderReport()">Generar reporte</button>
+   <button class="secondary" style="min-width:150px;flex:1;padding:14px" onclick="exportReportExcel()">⬇ Descargar Excel</button>
+   <button class="primary" style="min-width:150px;flex:1;padding:14px" onclick="printReport()">⬇ Descargar PDF</button>
+  </div>
   <div id="reportResult" style="margin-top:12px"></div>
  </div>
  <div class="card owner-only" id="capitalAdmin" style="margin-top:10px">
@@ -273,7 +279,11 @@ function render(){
  const due=todayLoans().reduce((s,l)=>s+scheduledTodayForLoan(l),0);
  const pendingAmount=todayLoans().reduce((s,l)=>s+pendingTodayForLoan(l),0);
  const pendingLoans=pendingTodayLoans();
+ const loansToday=loans.filter(l=>String(l.start_date||'').slice(0,10)===today);
+ const loansTodayAmount=loansToday.reduce((sum,l)=>sum+Number(l.principal||0),0);
  available.textContent=money(cash);dueToday.textContent=money(due);document.getElementById('collected').textContent=money(collected);pending.textContent=money(pendingAmount);expenses.textContent=money(exp);
+ document.getElementById('loansTodayCount').textContent=loansToday.length;
+ document.getElementById('loansTodayAmount').textContent=money(loansTodayAmount);
  countToday.textContent=pendingLoans.length+' pendiente'+(pendingLoans.length===1?'':'s');
  todayList.innerHTML=pendingLoans.map(l=>{const c=clientFor(l.client_id),bal=balanceForLoan(l.id),remaining=pendingTodayForLoan(l);return `<div class="card person"><div class="avatar">${(c.full_name||'?').split(' ').map(v=>v[0]).slice(0,2).join('')}</div><div class="info"><b>${clientDisplayName(c)}</b><small>Pendiente hoy ${money(remaining)} · Saldo ${money(bal)}</small></div><button class="primary" onclick="openPay('${l.id}')">Cobrar</button></div>`}).join('')||'<div class="empty">✓ Cobros de hoy completados.</div>';
  renderLoans();renderClients();renderAdmin();
@@ -469,10 +479,6 @@ function renderReport(){
    </div>
    <div style="margin-top:12px;padding:10px;border-radius:12px;background:#f4e8dc;font-size:13px">
      <b>Lectura rápida:</b> el capital aportado se presenta por separado. El movimiento operativo de caja muestra cuánto efectivo entró o salió por cobros, gastos y préstamos entregados. Un valor negativo no significa necesariamente una pérdida: puede reflejar dinero que salió para financiar nuevos préstamos.
-   </div>
-   <div class="actions" style="margin-top:12px">
-    <button class="secondary" onclick="exportReportExcel()">⬇ Descargar Excel</button>
-    <button class="primary" onclick="printReport()">⬇ Descargar PDF</button>
    </div>
  </div>`;
 }
