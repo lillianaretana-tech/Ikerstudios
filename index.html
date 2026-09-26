@@ -485,8 +485,12 @@ function openClientFile(id){
 }
 function editClient(id){
  const c=clients.find(x=>x.id===id); if(!c)return;
+ // Los clientes migrados originalmente solo tenían full_name. Si first_name/last_name
+ // están vacíos, mostramos full_name en Primer nombre para que nunca abra en blanco.
+ const migratedFullName=(!c.first_name&&!c.last_name)?(c.full_name||''):'';
+ const editFirst=c.first_name||migratedFullName;
  sheet.innerHTML=`<h3>Editar cliente #${c.client_number||'—'}</h3>
- <label>Primer nombre</label><input id="ecFirst" value="${String(c.first_name||'').replace(/"/g,'&quot;')}">
+ <label>Primer nombre / nombre completo</label><input id="ecFirst" value="${String(editFirst).replace(/"/g,'&quot;')}">
  <label>Apellido</label><input id="ecLast" value="${String(c.last_name||'').replace(/"/g,'&quot;')}">
  <label>Apodo</label><input id="ecNick" value="${String(c.nickname||'').replace(/"/g,'&quot;')}" placeholder="Opcional">
  <label>Teléfono</label><input id="ecPhone" value="${String(c.phone||'').replace(/"/g,'&quot;')}" placeholder="8888-8888">
@@ -765,8 +769,8 @@ function openPay(id){
  let l=loans.find(x=>x.id===id),c=clientFor(l.client_id),bal=balanceForLoan(id);
  if(!l||bal<=0){alert('Este crédito no tiene saldo pendiente.');return}
  const migrated=l.source_type==='physical_card';
- const suggested=migrated?'':pendingTodayForLoan(l);
- sheet.innerHTML=`<h3>Registrar cobro</h3><div class="sub"><b>${clientDisplayName(c)}</b> · saldo actual ${money(bal)}</div>${migrated?'<div class="role-note">Tarjeta migrada: registre el monto que el cliente entregue. No hay cuota diaria obligatoria para este saldo inicial.</div>':''}<label>Monto recibido</label><input id="payAmount" type="number" min="1" max="${bal}" value="${suggested||''}" placeholder="Monto recibido"><label>Forma de pago</label><select id="payMethod"><option value="cash">Efectivo</option><option value="sinpe">SINPE</option></select><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="confirmQuickPay('${id}')">Continuar</button></div>`;modal.classList.add('show')
+ const suggested=pendingTodayForLoan(l);
+ sheet.innerHTML=`<h3>Registrar cobro</h3><div class="sub"><b>${clientDisplayName(c)}</b> · saldo actual ${money(bal)}</div>${migrated?`<div class="role-note">Tarjeta migrada · cuota pactada de hoy: <b>${money(scheduledTodayForLoan(l))}</b>. Puede registrar el monto realmente recibido.</div>`:''}<label>Monto recibido</label><input id="payAmount" type="number" min="1" max="${bal}" value="${suggested||''}" placeholder="Monto recibido"><label>Forma de pago</label><select id="payMethod"><option value="cash">Efectivo</option><option value="sinpe">SINPE</option></select><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="confirmQuickPay('${id}')">Continuar</button></div>`;modal.classList.add('show')
 }
 function confirmQuickPay(id){const l=loans.find(x=>x.id===id),c=clientFor(l.client_id),bal=balanceForLoan(id),a=Number(payAmount.value),method=payMethod.value;if(!a||a<=0||a>bal){alert('Revise el monto recibido.');return}sheet.innerHTML=`<h3>Confirmar pago</h3><div class="card"><div class="receipt-line"><span>Cliente</span><b>${clientDisplayName(c)}</b></div><div class="receipt-line"><span>Saldo actual</span><b>${money(bal)}</b></div><div class="receipt-line"><span>Recibe</span><b>${money(a)}</b></div><div class="receipt-line"><span>Nuevo saldo</span><b>${money(bal-a)}</b></div><div class="receipt-line"><span>Forma</span><b>${method==='sinpe'?'SINPE':'Efectivo'}</b></div></div><div class="actions"><button class="secondary" onclick="openPay('${id}')">Atrás</button><button class="primary" onclick="payConfirmed('${id}',${a},'${method}')">Registrar pago</button></div>`}
 async function payConfirmed(id,a,method){window._quickPay={amount:a,method};await pay(id)}
