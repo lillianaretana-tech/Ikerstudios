@@ -93,6 +93,17 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
 <main>
 <section id="daily" class="view active">
  <div class="hero owner-only"><small>Disponible para prestar</small><div class="money" id="available">₡0</div><small>Caja disponible después de movimientos de hoy</small></div>
+ <div class="card owner-only" id="yesterdayCloseCard" style="margin-top:12px;border-left:5px solid var(--copper)">
+  <div class="section-title" style="margin:0 0 8px"><h2>📋 Resultado de ayer</h2><span class="sub" id="yesterdayCloseDate"></span></div>
+  <div class="grid" style="margin:0">
+   <div class="stat"><small>Base inicial</small><b id="yBase">₡0</b></div>
+   <div class="stat"><small>Cobros</small><b id="yCollections">₡0</b></div>
+   <div class="stat"><small>Créditos entregados</small><b id="yLoansOut">₡0</b></div>
+   <div class="stat"><small>Gastos</small><b id="yExpenses">₡0</b></div>
+  </div>
+  <div style="margin-top:10px;padding:12px;border-radius:14px;background:#efe2d3"><small class="sub">Saldo final de ayer → base de hoy</small><div class="balance" id="yFinal">₡0</div></div>
+  <div class="role-note">Las tarjetas físicas migradas no se cuentan como créditos entregados. El corte usa únicamente movimientos reales de caja.</div>
+ </div>
  <div class="grid owner-only">
   <div class="stat"><small>Por cobrar hoy</small><b id="dueToday">₡0</b></div>
   <div class="stat"><small>Cobrado hoy</small><b id="collected">₡0</b></div>
@@ -343,6 +354,22 @@ function paidTodayForLoan(id){
 function scheduledTodayForLoan(l){return Math.min(Number(l.expected_payment||0),balanceForLoan(l.id)+paidTodayForLoan(l.id))}
 function pendingTodayForLoan(l){return Math.max(0,scheduledTodayForLoan(l)-paidTodayForLoan(l.id))}
 function pendingTodayLoans(){return todayLoans().filter(l=>pendingTodayForLoan(l)>0)}
+function localISOOffset(days){const d=new Date();d.setDate(d.getDate()+days);return d.toLocaleDateString('en-CA',{timeZone:'America/Costa_Rica'})}
+function movementDate(m){return String(m.occurred_at||'').slice(0,10)}
+function renderYesterdayClose(){
+ if(!['owner','admin'].includes(role))return;
+ const y=localISOOffset(-1);
+ const before=cashMovements.filter(m=>movementDate(m)<y).reduce((s,m)=>s+Number(m.amount||0),0);
+ const ym=cashMovements.filter(m=>movementDate(m)===y);
+ const collections=ym.filter(m=>m.movement_type==='payment').reduce((s,m)=>s+Number(m.amount||0),0);
+ const loansOut=Math.abs(ym.filter(m=>m.movement_type==='loan_disbursement').reduce((s,m)=>s+Number(m.amount||0),0));
+ const expenses=Math.abs(ym.filter(m=>m.movement_type==='expense').reduce((s,m)=>s+Number(m.amount||0),0));
+ const other=ym.filter(m=>!['payment','loan_disbursement','expense'].includes(m.movement_type)).reduce((s,m)=>s+Number(m.amount||0),0);
+ const final=before+collections-loansOut-expenses+other;
+ const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=money(v)};
+ set('yBase',before);set('yCollections',collections);set('yLoansOut',loansOut);set('yExpenses',expenses);set('yFinal',final);
+ const de=document.getElementById('yesterdayCloseDate');if(de)de.textContent=fmtDate(y);
+}
 function render(){
  const today=todayISO();
  const collected=payments.filter(p=>String(p.payment_date).slice(0,10)===today).reduce((s,p)=>s+Number(p.amount),0);
