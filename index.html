@@ -261,18 +261,31 @@ async function openAudit(){
  sheet.innerHTML=`<h3>🔐 Auditoría</h3><div class="sub">Movimientos y accesos recientes. El identificador permite reconocer si se usó un equipo diferente.</div>${rows||'<div class="empty">Todavía no hay eventos registrados.</div>'}<button class="secondary big" style="margin-top:12px" onclick="closeModal()">Cerrar</button>`;
  modal.classList.add('show');
 }
+
+function c24PasswordSetupKey(){return 'c24_pw_setup_'+(session?.user?.id||'user')}
+function needsC24PasswordSetup(){return !!session?.user?.id && localStorage.getItem(c24PasswordSetupKey())!=='ok'}
+function openRequiredPasswordChange(){
+ sheet.innerHTML=`<h3>🔐 Proteja su acceso</h3>
+ <div class="sub">Antes de continuar, cambie la contraseña temporal por una contraseña personal de al menos 8 caracteres.</div>
+ <label>Nueva contraseña</label><input id="myNewPassword" type="password" minlength="8" autocomplete="new-password">
+ <label>Repita la contraseña</label><input id="myNewPassword2" type="password" minlength="8" autocomplete="new-password">
+ <div class="actions"><button class="primary" onclick="changeMyPassword(true)">Guardar y continuar</button></div>`;
+ modal.classList.add('show');
+}
+
 function openChangeMyPassword(){
  sheet.innerHTML=`<h3>Cambiar mi contraseña</h3><div class="sub">La contraseña nueva queda únicamente en Supabase; la aplicación no la guarda.</div><label>Nueva contraseña</label><input id="myNewPassword" type="password" minlength="8" autocomplete="new-password"><label>Repita la contraseña</label><input id="myNewPassword2" type="password" minlength="8" autocomplete="new-password"><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="changeMyPassword()">Guardar contraseña</button></div>`;
  modal.classList.add('show');
 }
-async function changeMyPassword(){
+async function changeMyPassword(required=false){
  const a=myNewPassword.value,b=myNewPassword2.value;
  if(a.length<8){alert('Use al menos 8 caracteres.');return}
  if(a!==b){alert('Las contraseñas no coinciden.');return}
  setLoading(true);const {error}=await sb.auth.updateUser({password:a});setLoading(false);
  if(error){alert(error.message);return}
  await auditEvent('password_changed','auth_user',session.user.id);
- closeModal();alert('Contraseña actualizada.');
+ localStorage.setItem(c24PasswordSetupKey(),'ok');
+ closeModal();alert(required?'Contraseña actualizada. Ya puede continuar.':'Contraseña actualizada.');
 }
 
 async function logout(){await auditEvent('logout');await sb.auth.signOut();location.reload()}
@@ -280,7 +293,7 @@ async function enterApp(){
  setLoading(true); authScreen.classList.add('hidden'); logoutBtn.style.display='inline-block';
  const {data:a,error:e}=await sb.rpc('get_my_app_access',{p_app:'loans'}).maybeSingle();
  if(e||!a){setLoading(false);authScreen.classList.remove('hidden');authMessage('Esta cuenta todavía no tiene acceso a Préstamos.');return}
- role=a.role; applyRoleUI(); await loadAll(); await auditEvent('login'); setLoading(false);
+ role=a.role; applyRoleUI(); await loadAll(); await auditEvent('login'); setLoading(false); if(needsC24PasswordSetup()) setTimeout(openRequiredPasswordChange,120);
 }
 async function loadAll(){
  const owner=['owner','admin'].includes(role);
@@ -661,7 +674,9 @@ function printReport(){
  <div class="footer">Cartera 24 · Desarrollado por LillyTech · 3RS Integrated Solutions</div>
  <div class="actions"><button onclick="window.print()">Guardar como PDF / Imprimir</button></div>
  <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script>
- </body></html>`);
+ 
+<!-- Cartera 24 FINAL V2: cambio obligatorio de contraseña en primer acceso -->
+</body></html>`);
  w.document.close();
 }
 function renderAdmin(){if(!['owner','admin'].includes(role))return;
