@@ -104,7 +104,8 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
   <div class="stat"><small>Colocado hoy</small><b id="placedToday">₡0</b></div>
  </div>
  <button class="primary big owner-only" onclick="openExpense()">＋ Registrar gasto</button>
- <div class="section-title"><h2>Cobros de hoy</h2><span class="sub" id="countToday"></span></div>
+ <div class="card" style="margin-top:14px"><b>🔎 Cobro rápido</b><div class="sub">Busca por nombre, apodo o teléfono y registra el abono sobre el saldo actual.</div><input id="quickSearch" placeholder="Buscar cliente…" oninput="renderQuickCollection()" style="margin-top:10px"><div id="quickResults" style="margin-top:8px"></div></div>
+<div class="section-title"><h2>Cobros de hoy</h2><span class="sub" id="countToday"></span></div>
  <div id="todayList"></div>
 </section>
 
@@ -121,6 +122,13 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
  <div class="section-title"><h2>Clientes</h2><button class="primary owner-only" onclick="openNewClient()">＋ Nuevo cliente</button></div>
  <input id="search" placeholder="Buscar por número, nombre, apellido, apodo o teléfono…" oninput="renderClients()">
  <div id="clientList" style="margin-top:12px"></div>
+</section>
+
+<section id="morosos" class="view">
+ <div class="section-title"><h2>⚠️ Morosos</h2><span class="sub" id="morosoSummary"></span></div>
+ <div class="card" style="border-color:#e3b7ae;background:#fff7f5"><b>Deuda morosa separada</b><div class="sub">Estos saldos no forman parte de la cartera activa ni de los cobros diarios.</div></div>
+ <input id="morosoSearch" placeholder="Buscar moroso por nombre o teléfono…" oninput="renderMorosos()" style="margin-top:12px">
+ <div id="morosoList" style="margin-top:12px"></div>
 </section>
 
 <section id="admin" class="view">
@@ -199,7 +207,8 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
  <button class="active" onclick="go('daily',this)"><span>⌂</span>Hoy</button>
  <button onclick="go('loans',this)"><span>▤</span>Créditos</button>
  <button onclick="go('clients',this)"><span>♙</span>Clientes</button>
- <button onclick="go('admin',this)"><span>⚙</span>Admin</button>
+ <button onclick="go('morosos',this)"><span>⚠️</span>Morosos</button>
+  <button onclick="go('admin',this)"><span>⚙</span>Admin</button>
 </nav>
 </div>
 
@@ -212,7 +221,7 @@ const SUPABASE_URL='https://mzsxdobicqmbnajqpbfe.supabase.co';
 const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16c3hkb2JpY3FtYm5hanFwYmZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3ODA2ODcsImV4cCI6MjEwNTM1NjY4N30.SPjpl7XtuDUFRwESMf-ccpbGDPK2WiBLjQru5drlnKk';
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const money=n=>'₡'+Math.round(Number(n||0)).toLocaleString('es-CR');
-let session=null, role=null, clients=[], loans=[], cycles=[], payments=[], loanExpenses=[], cashMovements=[], capitalContributions=[], collectors=[];
+let session=null, role=null, clients=[], loans=[], cycles=[], payments=[], loanExpenses=[], cashMovements=[], capitalContributions=[], collectors=[], morosos=[];
 const todayISO=()=>new Date().toLocaleDateString('en-CA',{timeZone:'America/Costa_Rica'});
 const fmtDate=s=>{if(!s)return '—';let [y,m,d]=s.slice(0,10).split('-');return `${d}/${m}/${y}`};
 const cycleFor=id=>cycles.filter(c=>c.loan_id===id).sort((a,b)=>b.cycle_number-a.cycle_number)[0];
@@ -301,13 +310,14 @@ async function loadAll(){
   sb.from('loans_clients').select('*').eq('active',true).order('full_name'),
   sb.from('loans_loans').select('*').order('created_at',{ascending:false}),
   sb.from('loans_cycles').select('*').order('cycle_number'),
-  sb.from('loans_payments').select('*').order('payment_date',{ascending:false})
+  sb.from('loans_payments').select('*').order('payment_date',{ascending:false}),
+   sb.from('loans_morosos').select('*').order('full_name')
  ];
  if(owner){base.push(sb.from('loans_expenses').select('*').order('expense_date',{ascending:false}),sb.from('loans_cash_movements').select('*').order('occurred_at',{ascending:false}),sb.from('loans_capital_contributions').select('*').order('contribution_date',{ascending:false}).order('created_at',{ascending:false}))}
  const res=await Promise.all(base); const err=res.find(x=>x.error)?.error;
  if(err){alert('No se pudieron cargar los datos: '+err.message);return}
- clients=res[0].data||[];loans=res[1].data||[];cycles=res[2].data||[];payments=res[3].data||[];
- loanExpenses=owner?(res[4].data||[]):[]; cashMovements=owner?(res[5].data||[]):[]; capitalContributions=owner?(res[6].data||[]):[];
+ clients=res[0].data||[];loans=res[1].data||[];cycles=res[2].data||[];payments=res[3].data||[];morosos=res[4].data||[];
+ loanExpenses=owner?(res[5].data||[]):[]; cashMovements=owner?(res[6].data||[]):[]; capitalContributions=owner?(res[7].data||[]):[];
  if(owner) await loadCollectors(); else collectors=[];
  render();
 }
@@ -323,7 +333,7 @@ function applyRoleUI(){
  document.querySelectorAll('.owner-only').forEach(x=>x.style.display=owner?'':'none');
  const adminBtn=document.querySelector('.nav button[onclick*="admin"]');
  if(adminBtn) adminBtn.style.display=owner?'':'none';
- document.querySelector('.nav').style.gridTemplateColumns=owner?'repeat(4,1fr)':'repeat(3,1fr)';
+ document.querySelector('.nav').style.gridTemplateColumns=owner?'repeat(5,1fr)':'repeat(4,1fr)';
 }
 function todayLoans(){return loans.filter(l=>['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0)}
 function paidTodayForLoan(id){
@@ -348,12 +358,14 @@ function render(){
  const nlt=document.getElementById('newLoansToday'),pt=document.getElementById('placedToday'); if(nlt)nlt.textContent=String(newLoans.length); if(pt)pt.textContent=money(placedTodayAmount);
  countToday.textContent=pendingLoans.length+' pendiente'+(pendingLoans.length===1?'':'s');
  todayList.innerHTML=pendingLoans.map(l=>{const c=clientFor(l.client_id),bal=balanceForLoan(l.id),remaining=pendingTodayForLoan(l);return `<div class="card person"><div class="avatar">${(c.full_name||'?').split(' ').map(v=>v[0]).slice(0,2).join('')}</div><div class="info"><b>${clientDisplayName(c)}</b><small>Pendiente hoy ${money(remaining)} · Saldo ${money(bal)}</small></div><button class="primary" onclick="openPay('${l.id}')">Cobrar</button></div>`}).join('')||'<div class="empty">✓ Cobros de hoy completados.</div>';
- renderLoans();renderClients();renderAdmin();
+ renderQuickCollection();renderLoans();renderClients();renderMorosos();renderAdmin();
  document.getElementById('todayLabel').textContent=new Intl.DateTimeFormat('es-CR',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'America/Costa_Rica'}).format(new Date());
  if(['owner','admin'].includes(role)&&document.getElementById('reportFrom')&&!document.getElementById('reportFrom').value){
    setReportPeriod('current');
  }
 }
+
+function renderQuickCollection(){const box=document.getElementById('quickResults');if(!box)return;const q=(document.getElementById('quickSearch')?.value||'').trim().toLowerCase();if(!q){box.innerHTML='<div class="sub">Escriba al menos parte del nombre o teléfono.</div>';return}const assigned=loans.filter(l=>['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0&&(role!=='collector'||l.collector_id===session?.user?.id));const found=assigned.filter(l=>{const c=clientFor(l.client_id);return [c.full_name,c.first_name,c.last_name,c.nickname,c.phone].some(v=>String(v||'').toLowerCase().includes(q))}).slice(0,12);box.innerHTML=found.map(l=>{const c=clientFor(l.client_id);return `<div class="card person" style="margin-top:7px"><div class="info"><b>${clientDisplayName(c)}</b><small>${c.phone?c.phone+' · ':''}Saldo ${money(balanceForLoan(l.id))}</small></div><button class="primary" onclick="openPay('${l.id}')">Cobrar</button></div>`}).join('')||'<div class="sub">No encontré clientes activos con esa búsqueda.</div>'}
 
 function activeCycleForLoan(id){return cycles.filter(c=>c.loan_id===id&&c.status==='active').sort((a,b)=>Number(b.cycle_number)-Number(a.cycle_number))[0]||null}
 function cyclePaid(cycleId){return payments.filter(p=>p.cycle_id===cycleId).reduce((s,p)=>s+Number(p.amount||0),0)}
@@ -386,6 +398,15 @@ function renderClients(){
 
 
 
+function renderMorosos(){
+ const box=document.getElementById('morosoList');if(!box)return;
+ const q=(document.getElementById('morosoSearch')?.value||'').trim().toLowerCase();
+ const list=morosos.filter(m=>[m.full_name,m.phone].some(v=>String(v||'').toLowerCase().includes(q)));
+ const total=morosos.reduce((s,m)=>s+Number(m.opening_balance||0),0);
+ const sm=document.getElementById('morosoSummary');if(sm)sm.textContent=`${morosos.length} cliente${morosos.length===1?'':'s'} · ${money(total)}`;
+ box.innerHTML=list.map(m=>`<div class="card person" style="border-left:5px solid var(--warn)"><div class="avatar">⚠</div><div class="info"><b>${m.full_name}</b><small>${m.phone?m.phone+' · ':''}Saldo moroso ${money(m.opening_balance)}</small></div><span class="pill late">MOROSO</span></div>`).join('')||'<div class="empty">No se encontraron morosos.</div>';
+}
+function morosoMatch(name,phone){const n=String(name||'').trim().toLowerCase(),p=String(phone||'').replace(/\D/g,'');return morosos.find(m=>(p&&String(m.phone||'').replace(/\D/g,'')===p)||(n&&String(m.full_name||'').trim().toLowerCase()===n));}
 function openNewClient(){
  sheet.innerHTML=`<h3>Nuevo cliente</h3><div class="sub">El número de cliente se asigna automáticamente.</div>
  <label>Primer nombre</label><input id="ncFirst" placeholder="Opcional">
@@ -713,7 +734,16 @@ async function confirmRefinance(id){
  alert(`Refinanciamiento creado correctamente.\nNuevo saldo del ciclo: ${money(next)}.`);
  openLoanHistory(id);
 }
-function openPay(id){let l=loans.find(x=>x.id===id),c=clientFor(l.client_id),bal=balanceForLoan(id),remaining=pendingTodayForLoan(l);if(remaining<=0){alert('El cobro esperado de hoy ya fue completado.');return}sheet.innerHTML=`<h3>Registrar cobro</h3><div class="sub">${c.full_name} · saldo ${money(bal)}</div><label>Monto recibido</label><input id="payAmount" type="number" value="${remaining}"><div class="sub">Pendiente esperado hoy: ${money(remaining)}</div><label>Forma de pago</label><select id="payMethod"><option value="cash">Efectivo</option><option value="sinpe">SINPE</option></select><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="pay('${id}')">Confirmar pago</button></div>`;modal.classList.add('show')}
+function openPay(id){
+ let l=loans.find(x=>x.id===id),c=clientFor(l.client_id),bal=balanceForLoan(id);
+ if(!l||bal<=0){alert('Este crédito no tiene saldo pendiente.');return}
+ const migrated=l.source_type==='physical_card';
+ const suggested=migrated?'':pendingTodayForLoan(l);
+ sheet.innerHTML=`<h3>Registrar cobro</h3><div class="sub"><b>${clientDisplayName(c)}</b> · saldo actual ${money(bal)}</div>${migrated?'<div class="role-note">Tarjeta migrada: registre el monto que el cliente entregue. No hay cuota diaria obligatoria para este saldo inicial.</div>':''}<label>Monto recibido</label><input id="payAmount" type="number" min="1" max="${bal}" value="${suggested||''}" placeholder="Monto recibido"><label>Forma de pago</label><select id="payMethod"><option value="cash">Efectivo</option><option value="sinpe">SINPE</option></select><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="confirmQuickPay('${id}')">Continuar</button></div>`;modal.classList.add('show')
+}
+function confirmQuickPay(id){const l=loans.find(x=>x.id===id),c=clientFor(l.client_id),bal=balanceForLoan(id),a=Number(payAmount.value),method=payMethod.value;if(!a||a<=0||a>bal){alert('Revise el monto recibido.');return}sheet.innerHTML=`<h3>Confirmar pago</h3><div class="card"><div class="receipt-line"><span>Cliente</span><b>${clientDisplayName(c)}</b></div><div class="receipt-line"><span>Saldo actual</span><b>${money(bal)}</b></div><div class="receipt-line"><span>Recibe</span><b>${money(a)}</b></div><div class="receipt-line"><span>Nuevo saldo</span><b>${money(bal-a)}</b></div><div class="receipt-line"><span>Forma</span><b>${method==='sinpe'?'SINPE':'Efectivo'}</b></div></div><div class="actions"><button class="secondary" onclick="openPay('${id}')">Atrás</button><button class="primary" onclick="payConfirmed('${id}',${a},'${method}')">Registrar pago</button></div>`}
+async function payConfirmed(id,a,method){window._quickPay={amount:a,method};await pay(id)}
+
 
 function receiptNumber(p){return 'C24-'+String(p.payment_date||todayISO()).slice(0,10).replaceAll('-','')+'-'+String(p.id||'').replaceAll('-','').slice(0,6).toUpperCase()}
 function receiptData(paymentId){
@@ -784,13 +814,13 @@ function printPaymentReceipt(paymentId){
  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${r.no}</title><style>@page{size:A5;margin:12mm}body{font-family:Arial;color:#292421}.box{border:1px solid #cdb39e;border-radius:14px;padding:22px}.brand{text-align:center;background:#3a2923;color:#fff;padding:18px;border-radius:10px;margin-bottom:18px}.brand b{font-size:25px}.row{display:flex;justify-content:space-between;border-bottom:1px solid #eadfd4;padding:10px 0}.foot{text-align:center;color:#756a63;font-size:11px;margin-top:20px}@media print{button{display:none}}</style></head><body><div class="box"><div class="brand"><b>CARTERA 24</b><div>COMPROBANTE DE PAGO</div></div>${[['Recibo',r.no],['Cliente',r.c.full_name||'Cliente'],['Fecha',fmtDate(r.p.payment_date)],['Forma de pago',r.p.payment_method==='sinpe'?'SINPE':'Efectivo'],['Saldo anterior',money(r.before)],['Abono recibido',money(r.p.amount)],['Nuevo saldo',money(r.after)],['Ciclo',r.cy?.cycle_number||1]].map(x=>`<div class="row"><span>${x[0]}</span><b>${x[1]}</b></div>`).join('')}<div class="foot">Gracias por su pago<br>LillyTech · 3RS Integrated Solutions</div></div><button onclick="window.print()">Guardar como PDF / Imprimir</button><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);w.document.close();
 }
 async function pay(id){
- let l=loans.find(x=>x.id===id),cy=cycleFor(id),bal=balanceForLoan(id),a=Number(payAmount.value),method=payMethod.value;
+ let l=loans.find(x=>x.id===id),cy=cycleFor(id),bal=balanceForLoan(id),a=Number(window._quickPay?.amount ?? document.getElementById('payAmount')?.value),method=window._quickPay?.method ?? document.getElementById('payMethod')?.value;
  if(!a||a<=0||a>bal){alert('Revise el monto recibido.');return}
  setLoading(true);
  const {data:p,error}=await sb.from('loans_payments').insert({loan_id:id,cycle_id:cy.id,amount:a,payment_date:todayISO(),payment_method:method,received_by:session.user.id,created_by:session.user.id}).select().single();
  if(error){setLoading(false);alert(error.message);return}
  if(method==='cash')await sb.from('loans_cash_movements').insert({movement_type:'payment',amount:a,loan_id:id,payment_id:p.id,created_by:session.user.id});
- await loadAll();setLoading(false);openPaymentReceipt(p.id);
+ window._quickPay=null;await auditEvent('payment_recorded','payment',p.id,null,{loan_id:id,amount:a,payment_method:method});await loadAll();setLoading(false);openPaymentReceipt(p.id);
 }
 function openExpense(){sheet.innerHTML=`<h3>Registrar gasto</h3><label>Concepto</label><input id="expenseConcept" placeholder="Ej. transporte"><label>Monto</label><input id="expenseAmount" type="number" placeholder="0"><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveExpense()">Guardar</button></div>`;modal.classList.add('show')}
 async function saveExpense(){let a=Number(expenseAmount.value),concept=expenseConcept.value.trim();if(!a||a<=0||!concept)return;setLoading(true);const {data:e,error}=await sb.from('loans_expenses').insert({concept,amount:a,expense_date:todayISO(),created_by:session.user.id}).select().single();if(error){setLoading(false);alert(error.message);return}await sb.from('loans_cash_movements').insert({movement_type:'expense',amount:-a,expense_id:e.id,created_by:session.user.id});closeModal();await loadAll();setLoading(false)}
@@ -865,7 +895,7 @@ async function savePhysicalCardImport(){
 
 function openNewLoan(){const active=collectors.filter(c=>c.active);sheet.innerHTML=`<h3>Nuevo préstamo</h3><label>Cliente</label><select id="existingClient"><option value="">＋ Cliente nuevo</option>${clients.map(c=>`<option value="${c.id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select><label>Nombre del cliente nuevo</label><input id="newName" placeholder="Nombre completo"><label>Identificación (opcional)</label><input id="newIdentification" placeholder="Cédula / identificación"><label>Teléfono (opcional)</label><input id="newPhone" placeholder="8888-8888"><label>Dirección / referencia (opcional)</label><textarea id="newAddress" rows="2" placeholder="Dirección o punto de referencia"></textarea><label>Notas del cliente (opcional)</label><textarea id="newClientNotes" rows="2" placeholder="Información útil"></textarea><label>Monto entregado</label><input id="newPrincipal" type="number" placeholder="100000" oninput="calcNew()"><div class="row"><div><label>Interés</label><input value="20%" disabled></div><div><label>Total a cobrar</label><input id="newTotal" disabled></div></div><div class="row"><div><label>Plazo</label><input value="24 días" disabled></div><div><label>Frecuencia</label><select id="newFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select></div></div><label>Monto esperado por cobro</label><input id="newPayment" type="number" placeholder="5000"><label>Cobrador asignado</label><select id="newCollector"><option value="">Sin asignar / Iker</option>${active.map(c=>`<option value="${c.user_id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveLoan()">Crear préstamo</button></div>`;modal.classList.add('show')}
 function calcNew(){newTotal.value=money(Number(newPrincipal.value||0)*1.2)}
-async function saveLoan(){let p=Number(newPrincipal.value),pay=Number(newPayment.value),clientId=existingClient.value;if(!p||!pay){alert('Complete monto y cobro esperado.');return}setLoading(true);if(!clientId){let name=newName.value.trim();if(!name){setLoading(false);alert('Indique el cliente.');return}const {data:c,error}=await sb.from('loans_clients').insert({full_name:name,identification:newIdentification.value.trim()||null,phone:newPhone.value.trim()||null,address:newAddress.value.trim()||null,notes:newClientNotes.value.trim()||null}).select().single();if(error){setLoading(false);alert(error.message);return}clientId=c.id}const collectorId=newCollector.value||null;const collector=collectors.find(c=>c.user_id===collectorId);const {data:l,error}=await sb.from('loans_loans').insert({client_id:clientId,principal:p,interest_rate:20,term_days:24,start_date:todayISO(),collection_frequency:newFreq.value,expected_payment:pay,collector_id:collectorId,collector_name_snapshot:collector?.full_name||null,created_by:session.user.id}).select().single();if(error){setLoading(false);alert(error.message);return}await auditEvent('loan_created','loan',l.id,null,{principal:p,interest_rate:20,client_id:clientId});if(collectorId)await sb.from('loans_collector_history').insert({loan_id:l.id,collector_id:collectorId,collector_name:collector.full_name,assigned_by:session.user.id});await sb.from('loans_cash_movements').insert({movement_type:'loan_disbursement',amount:-p,loan_id:l.id,created_by:session.user.id});closeModal();await loadAll();setLoading(false);go('loans',document.querySelectorAll('.nav button')[1])}
+async function saveLoan(){let p=Number(newPrincipal.value),pay=Number(newPayment.value),clientId=existingClient.value;if(!p||!pay){alert('Complete monto y cobro esperado.');return}const existing=clients.find(c=>c.id===clientId);const mm=morosoMatch(existing?.full_name||newName.value,existing?.phone||newPhone.value);if(mm){alert('⚠️ CLIENTE MOROSO\n\n'+mm.full_name+' mantiene una deuda morosa de '+money(mm.opening_balance)+'.\n\nNo se creará un crédito normal. Iker debe revisar y autorizar un acuerdo especial.');return}setLoading(true);if(!clientId){let name=newName.value.trim();if(!name){setLoading(false);alert('Indique el cliente.');return}const {data:c,error}=await sb.from('loans_clients').insert({full_name:name,identification:newIdentification.value.trim()||null,phone:newPhone.value.trim()||null,address:newAddress.value.trim()||null,notes:newClientNotes.value.trim()||null}).select().single();if(error){setLoading(false);alert(error.message);return}clientId=c.id}const collectorId=newCollector.value||null;const collector=collectors.find(c=>c.user_id===collectorId);const {data:l,error}=await sb.from('loans_loans').insert({client_id:clientId,principal:p,interest_rate:20,term_days:24,start_date:todayISO(),collection_frequency:newFreq.value,expected_payment:pay,collector_id:collectorId,collector_name_snapshot:collector?.full_name||null,created_by:session.user.id}).select().single();if(error){setLoading(false);alert(error.message);return}await auditEvent('loan_created','loan',l.id,null,{principal:p,interest_rate:20,client_id:clientId});if(collectorId)await sb.from('loans_collector_history').insert({loan_id:l.id,collector_id:collectorId,collector_name:collector.full_name,assigned_by:session.user.id});await sb.from('loans_cash_movements').insert({movement_type:'loan_disbursement',amount:-p,loan_id:l.id,created_by:session.user.id});closeModal();await loadAll();setLoading(false);go('loans',document.querySelectorAll('.nav button')[1])}
 function openCapital(){const hasInitial=capitalContributions.some(x=>x.contribution_type==='initial');sheet.innerHTML=`<h3>Registrar capital</h3><p class="sub">Este dinero aumenta el disponible para prestar y queda registrado en el historial.</p><label>Tipo</label><select id="capitalType">${hasInitial?'':'<option value="initial">Capital inicial</option>'}<option value="additional">Aporte adicional</option></select><label>Monto</label><input id="capitalAmount" type="number" min="1" placeholder="Ej. 500000"><label>Fecha</label><input id="capitalDate" type="date" value="${todayISO()}"><label>Nota (opcional)</label><input id="capitalNotes" placeholder="Ej. Capital de arranque"><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveCapital()">Guardar capital</button></div>`;modal.classList.add('show')}
 async function saveCapital(){const amount=Number(capitalAmount.value||0),type=capitalType.value,date=capitalDate.value||todayISO(),notes=capitalNotes.value.trim();if(amount<=0){alert('Indique un monto mayor que cero.');return}setLoading(true);const {error}=await sb.rpc('loans_register_capital',{p_amount:amount,p_type:type,p_date:date,p_notes:notes||null});setLoading(false);if(error){alert('No se pudo registrar el capital: '+error.message);return}closeModal();await loadAll();alert(type==='initial'?'Capital inicial registrado.':'Aporte de capital registrado.')}
 function openNewCollector(){sheet.innerHTML=`<h3>Agregar cobrador</h3><p class="sub">Iker crea el acceso directamente. No se envía correo de confirmación.</p><label>Nombre completo</label><input id="collectorName" autocomplete="off"><label>Correo / usuario</label><input id="collectorEmail" type="email" autocomplete="off"><label>Contraseña temporal</label><input id="collectorPassword" type="password" minlength="8" autocomplete="new-password"><div class="role-note">Mínimo 8 caracteres. Compártala con el cobrador por un medio privado.</div><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="createCollector()">Crear acceso</button></div>`;modal.classList.add('show')}
