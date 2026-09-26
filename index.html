@@ -781,7 +781,9 @@ function receiptData(paymentId){
  const idx=cyclePayments.findIndex(x=>x.id===p.id);
  const beforePaid=cyclePayments.slice(0,idx<0?0:idx).reduce((s,x)=>s+Number(x.amount||0),0);
  const before=Math.max(0,Number(cy?.amount_due||0)-beforePaid),after=Math.max(0,before-Number(p.amount||0));
- return {p,l,c,cy,before,after,no:receiptNumber(p)};
+ const migrated=l.source_type==='physical_card';
+ const installmentNumber=idx>=0?idx+1:cyclePayments.length;
+ return {p,l,c,cy,before,after,no:receiptNumber(p),migrated,installmentNumber};
 }
 function receiptHTML(r){
  return `<div class="receipt" id="receiptCard">
@@ -793,7 +795,7 @@ function receiptHTML(r){
    <div class="receipt-line"><span>Saldo anterior</span><b>${money(r.before)}</b></div>
    <div class="receipt-line"><span>Abono recibido</span><b>${money(r.p.amount)}</b></div>
    <div class="receipt-line"><span>Nuevo saldo</span><b>${money(r.after)}</b></div>
-   <div class="receipt-line"><span>Ciclo</span><b>${r.cy?.cycle_number||1}</b></div>
+   <div class="receipt-line"><span>${r.migrated?'Concepto':'Cuota'}</span><b>${r.migrated?'Abono a saldo anterior':'#'+r.installmentNumber}</b></div>
    <div style="text-align:center;margin-top:12px;font-size:11px;color:var(--muted)">Gracias por su pago · LillyTech / 3RS Integrated Solutions</div>
  </div>`;
 }
@@ -809,18 +811,21 @@ function openPaymentReceipt(paymentId){
  modal.classList.add('show');
 }
 function receiptText(r){
- return `CARTERA 24\nRecibo ${r.no}\nCliente: ${r.c.full_name||'Cliente'}\nFecha: ${fmtDate(r.p.payment_date)}\nForma de pago: ${r.p.payment_method==='sinpe'?'SINPE':'Efectivo'}\nSaldo anterior: ${money(r.before)}\nAbono recibido: ${money(r.p.amount)}\nNuevo saldo: ${money(r.after)}\nCiclo: ${r.cy?.cycle_number||1}\n\nGracias por su pago.`;
+ return `CARTERA 24\nRecibo ${r.no}\nCliente: ${r.c.full_name||'Cliente'}\nFecha: ${fmtDate(r.p.payment_date)}\nForma de pago: ${r.p.payment_method==='sinpe'?'SINPE':'Efectivo'}\nSaldo anterior: ${money(r.before)}\nAbono recibido: ${money(r.p.amount)}\nNuevo saldo: ${money(r.after)}\n${r.migrated?'Concepto: Abono a saldo anterior':'Cuota: #'+r.installmentNumber}\n\nGracias por su pago.`;
 }
+function whatsappNumber(phone){let d=String(phone||'').replace(/\D/g,'');if(d.length===8)d='506'+d;return d}
 function shareReceiptWhatsApp(paymentId){
  const r=receiptData(paymentId);if(!r)return;
- window.open('https://wa.me/?text='+encodeURIComponent(receiptText(r)),'_blank');
+ const phone=whatsappNumber(r.c.phone);
+ if(!phone){alert('Este cliente no tiene teléfono registrado. Agréguelo en su expediente para enviar el recibo directamente por WhatsApp.');return}
+ window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(receiptText(r)),'_blank');
 }
 async function receiptCanvas(r){
  const scale=2,w=720,h=760,c=document.createElement('canvas');c.width=w*scale;c.height=h*scale;
  const x=c.getContext('2d');x.scale(scale,scale);x.fillStyle='#fffaf3';x.fillRect(0,0,w,h);
  x.fillStyle='#3a2923';x.fillRect(0,0,w,115);x.fillStyle='#fff';x.textAlign='center';x.font='bold 34px Arial';x.fillText('CARTERA 24',w/2,52);
  x.font='18px Arial';x.fillText('COMPROBANTE DE PAGO',w/2,84);x.textAlign='left';
- const rows=[['Recibo',r.no],['Cliente',r.c.full_name||'Cliente'],['Fecha',fmtDate(r.p.payment_date)],['Forma de pago',r.p.payment_method==='sinpe'?'SINPE':'Efectivo'],['Saldo anterior',money(r.before)],['Abono recibido',money(r.p.amount)],['Nuevo saldo',money(r.after)],['Ciclo',String(r.cy?.cycle_number||1)]];
+ const rows=[['Recibo',r.no],['Cliente',r.c.full_name||'Cliente'],['Fecha',fmtDate(r.p.payment_date)],['Forma de pago',r.p.payment_method==='sinpe'?'SINPE':'Efectivo'],['Saldo anterior',money(r.before)],['Abono recibido',money(r.p.amount)],['Nuevo saldo',money(r.after)],[r.migrated?'Concepto':'Cuota',r.migrated?'Abono a saldo anterior':'#'+r.installmentNumber]];
  let y=160;x.font='20px Arial';
  rows.forEach(([a,b],i)=>{x.fillStyle='#756a63';x.fillText(a,48,y);x.fillStyle='#292421';x.font=(i===5||i===6?'bold 24px Arial':'bold 20px Arial');x.textAlign='right';x.fillText(b,w-48,y);x.textAlign='left';x.font='20px Arial';x.strokeStyle='#e1d1c3';x.beginPath();x.moveTo(48,y+18);x.lineTo(w-48,y+18);x.stroke();y+=66});
  x.fillStyle='#756a63';x.textAlign='center';x.font='16px Arial';x.fillText('Gracias por su pago',w/2,h-58);x.fillText('LillyTech · 3RS Integrated Solutions',w/2,h-30);
@@ -838,7 +843,7 @@ async function shareReceiptImage(paymentId){
 }
 function printPaymentReceipt(paymentId){
  const r=receiptData(paymentId);if(!r)return;const w=window.open('','_blank');
- w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${r.no}</title><style>@page{size:A5;margin:12mm}body{font-family:Arial;color:#292421}.box{border:1px solid #cdb39e;border-radius:14px;padding:22px}.brand{text-align:center;background:#3a2923;color:#fff;padding:18px;border-radius:10px;margin-bottom:18px}.brand b{font-size:25px}.row{display:flex;justify-content:space-between;border-bottom:1px solid #eadfd4;padding:10px 0}.foot{text-align:center;color:#756a63;font-size:11px;margin-top:20px}@media print{button{display:none}}</style></head><body><div class="box"><div class="brand"><b>CARTERA 24</b><div>COMPROBANTE DE PAGO</div></div>${[['Recibo',r.no],['Cliente',r.c.full_name||'Cliente'],['Fecha',fmtDate(r.p.payment_date)],['Forma de pago',r.p.payment_method==='sinpe'?'SINPE':'Efectivo'],['Saldo anterior',money(r.before)],['Abono recibido',money(r.p.amount)],['Nuevo saldo',money(r.after)],['Ciclo',r.cy?.cycle_number||1]].map(x=>`<div class="row"><span>${x[0]}</span><b>${x[1]}</b></div>`).join('')}<div class="foot">Gracias por su pago<br>LillyTech · 3RS Integrated Solutions</div></div><button onclick="window.print()">Guardar como PDF / Imprimir</button><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);w.document.close();
+ w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${r.no}</title><style>@page{size:A5;margin:12mm}body{font-family:Arial;color:#292421}.box{border:1px solid #cdb39e;border-radius:14px;padding:22px}.brand{text-align:center;background:#3a2923;color:#fff;padding:18px;border-radius:10px;margin-bottom:18px}.brand b{font-size:25px}.row{display:flex;justify-content:space-between;border-bottom:1px solid #eadfd4;padding:10px 0}.foot{text-align:center;color:#756a63;font-size:11px;margin-top:20px}@media print{button{display:none}}</style></head><body><div class="box"><div class="brand"><b>CARTERA 24</b><div>COMPROBANTE DE PAGO</div></div>${[['Recibo',r.no],['Cliente',r.c.full_name||'Cliente'],['Fecha',fmtDate(r.p.payment_date)],['Forma de pago',r.p.payment_method==='sinpe'?'SINPE':'Efectivo'],['Saldo anterior',money(r.before)],['Abono recibido',money(r.p.amount)],['Nuevo saldo',money(r.after)],[r.migrated?'Concepto':'Cuota',r.migrated?'Abono a saldo anterior':'#'+r.installmentNumber]].map(x=>`<div class="row"><span>${x[0]}</span><b>${x[1]}</b></div>`).join('')}<div class="foot">Gracias por su pago<br>LillyTech · 3RS Integrated Solutions</div></div><button onclick="window.print()">Guardar como PDF / Imprimir</button><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);w.document.close();
 }
 async function pay(id){
  let l=loans.find(x=>x.id===id),cy=cycleFor(id),bal=balanceForLoan(id),a=Number(window._quickPay?.amount ?? document.getElementById('payAmount')?.value),method=window._quickPay?.method ?? document.getElementById('payMethod')?.value;
