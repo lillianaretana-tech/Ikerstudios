@@ -57,10 +57,15 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
 .role-note{font-size:12px;color:var(--muted);margin-top:6px}.collector-row{display:flex;align-items:center;gap:10px;margin-top:10px}.collector-row .info{min-width:0}.collector-actions{display:flex;gap:6px;flex-wrap:wrap}.owner-only{}
 
 .auth-screen{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,#f6efe5,#ead7c4);display:grid;place-items:center;padding:20px}.auth-card{width:min(430px,100%);background:var(--paper);border-radius:24px;padding:24px;box-shadow:var(--shadow)}.auth-card h1{margin:0 0 4px}.auth-card p{color:var(--muted);margin:0 0 18px}.auth-msg{font-size:13px;margin-top:10px;color:var(--warn)}.hidden{display:none!important}.loading{position:fixed;inset:0;background:rgba(246,239,229,.82);z-index:40;display:grid;place-items:center;font-weight:800;color:var(--copper2)}
+.compact-toggle{padding:7px 10px;font-size:12px;white-space:nowrap}
+.admin-quick{display:grid;gap:8px}
+.admin-module-btn{display:flex;align-items:center;justify-content:space-between;text-align:left;margin:0}
+.admin-collapsible{margin-bottom:2px}
+@media(max-width:390px){.compact-toggle{padding:6px 8px;font-size:11px}.admin-module-btn{font-size:14px;padding:13px}}
 </style>
 
 <style>
-/* V19 — caja corregida + créditos realizados por fecha */
+/* V20 — Admin compacto para móvil + módulos desplegables */
 #sheet textarea,
 .sheet textarea,
 .modal textarea {
@@ -145,28 +150,34 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
 <section id="admin" class="view">
  <div class="section-title"><h2>Administrador</h2><span class="sub">Control diario</span></div>
  <div class="card" id="dailyAdminSummary">
-  <div class="section-title" style="margin:0 0 8px"><h2>Resumen por día</h2></div>
-  <label>Fecha</label><input id="adminDailyDate" type="date" onchange="renderAdminDailySummary()">
-  <div class="grid" style="margin-top:10px">
-   <div class="stat"><small>Disponible inicial para prestar</small><b id="adminDayInitial">₡0</b></div>
-   <div class="stat"><small>Cobros recibidos</small><b id="adminDayCollected">₡0</b></div>
-   <div class="stat"><small>Préstamos realizados</small><b id="adminDayLoans">₡0</b></div>
-   <div class="stat"><small>Gastos</small><b id="adminDayExpenses">₡0</b></div>
-   <div class="stat"><small>Disponible al cierre</small><b id="adminDayFinal">₡0</b></div>
+  <div class="section-title" style="margin:0"><h2>Resumen por día</h2><button class="secondary compact-toggle" id="dailySummaryToggle" onclick="toggleAdminPanel('dailySummaryBody','dailySummaryToggle',true)">▲ Ver menos</button></div>
+  <div id="dailySummaryBody">
+   <label>Fecha</label><input id="adminDailyDate" type="date" onchange="renderAdminDailySummary()">
+   <div class="grid" style="margin-top:10px">
+    <div class="stat"><small>Disponible inicial para prestar</small><b id="adminDayInitial">₡0</b></div>
+    <div class="stat"><small>Cobros recibidos</small><b id="adminDayCollected">₡0</b></div>
+    <div class="stat"><small>Préstamos realizados</small><b id="adminDayLoans">₡0</b></div>
+    <div class="stat"><small>Gastos</small><b id="adminDayExpenses">₡0</b></div>
+    <div class="stat"><small>Disponible al cierre</small><b id="adminDayFinal">₡0</b></div>
+   </div>
   </div>
  </div>
- <div class="card owner-only" id="recentCreditsAdmin" style="margin-top:10px">
- <div class="section-title" style="margin:0 0 8px"><h2>📅 Créditos realizados por fecha</h2></div>
- <div class="sub">Consulta en pantalla los créditos nuevos entregados en una fecha. Las tarjetas antiguas migradas no se incluyen.</div>
- <label>Fecha</label><input id="recentCreditDate" type="date" onchange="renderRecentCreditsByDate()">
- <div id="recentCreditsResult" style="margin-top:10px"></div>
-</div>
-<div class="card owner-only" id="recentPaymentsAdmin" style="margin-top:10px">
- <div class="section-title" style="margin:0 0 8px"><h2>💰 Cobros por fecha</h2></div>
- <div class="sub">Consulta quién pagó, cuánto pagó y quién terminó de cancelar su crédito.</div>
- <label>Fecha</label><input id="recentPaymentDate" type="date" onchange="renderRecentPaymentsByDate()">
- <div id="recentPaymentsResult" style="margin-top:10px"></div>
-</div>
+ <div class="admin-quick owner-only" style="margin-top:10px">
+  <button class="secondary big admin-module-btn" id="creditsDateToggle" onclick="toggleAdminPanel('recentCreditsBody','creditsDateToggle')">📅 Créditos por fecha <span>▼</span></button>
+  <div class="card admin-collapsible" id="recentCreditsBody" style="display:none;margin-top:8px">
+   <div class="sub">Consulta los créditos nuevos entregados en una fecha. Las tarjetas antiguas migradas no se incluyen.</div>
+   <label>Fecha</label><input id="recentCreditDate" type="date" onchange="renderRecentCreditsByDate()">
+   <div id="recentCreditsResult" style="margin-top:10px"></div>
+   <button class="secondary big" style="margin-top:10px" onclick="toggleAdminPanel('recentCreditsBody','creditsDateToggle')">▲ Ver menos</button>
+  </div>
+  <button class="secondary big admin-module-btn" id="paymentsDateToggle" onclick="toggleAdminPanel('recentPaymentsBody','paymentsDateToggle')">💰 Cobros por fecha <span>▼</span></button>
+  <div class="card admin-collapsible" id="recentPaymentsBody" style="display:none;margin-top:8px">
+   <div class="sub">Consulta quién pagó, cuánto pagó y quién terminó de cancelar su crédito.</div>
+   <label>Fecha</label><input id="recentPaymentDate" type="date" onchange="renderRecentPaymentsByDate()">
+   <div id="recentPaymentsResult" style="margin-top:10px"></div>
+   <button class="secondary big" style="margin-top:10px" onclick="toggleAdminPanel('recentPaymentsBody','paymentsDateToggle')">▲ Ver menos</button>
+  </div>
+ </div>
 <div class="card owner-only" id="reportsAdmin" style="margin-top:10px">
   <div class="section-title" style="margin:0 0 6px"><h2>Reportes</h2></div>
   <div class="sub">Reportes semanal, quincenal, mensual, por cierre y por período personalizado; listos para guardar o compartir.</div>
@@ -764,6 +775,18 @@ function printReport(){
 <!-- Cartera 24 FINAL V2: cambio obligatorio de contraseña en primer acceso -->
 </body></html>`);
  w.document.close();
+}
+function toggleAdminPanel(bodyId,buttonId,summaryOpen){
+ const body=document.getElementById(bodyId),btn=document.getElementById(buttonId);
+ if(!body||!btn)return;
+ const opening=body.style.display==='none'||getComputedStyle(body).display==='none';
+ body.style.display=opening?'block':'none';
+ if(summaryOpen){btn.textContent=opening?'▲ Ver menos':'▼ Ver resumen';return;}
+ const isCredits=bodyId==='recentCreditsBody';
+ btn.innerHTML=(isCredits?'📅 Créditos por fecha ':'💰 Cobros por fecha ')+(opening?'<span>▲</span>':'<span>▼</span>');
+ if(opening){
+  if(isCredits)renderRecentCreditsByDate();else renderRecentPaymentsByDate();
+ }
 }
 function renderRecentCreditsByDate(){
  const input=document.getElementById('recentCreditDate'),box=document.getElementById('recentCreditsResult');
