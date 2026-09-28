@@ -316,7 +316,7 @@ async function enterApp(){
  role=a.role; applyRoleUI(); await loadAll(); await auditEvent('login'); setLoading(false); if(needsC24PasswordSetup()) setTimeout(openRequiredPasswordChange,120);
 }
 async function loadAll(){
- const owner=['owner','admin'].includes(role);
+ const owner=['owner','admin','technical_support'].includes(role);
  const base=[
   sb.from('loans_clients').select('*').eq('active',true).order('full_name'),
   sb.from('loans_loans').select('*').order('created_at',{ascending:false}),
@@ -340,11 +340,19 @@ async function loadCollectors(){
  collectors=(a||[]).map(x=>({...x,full_name:(p||[]).find(y=>y.user_id===x.user_id)?.full_name||'Cobrador'}));
 }
 function applyRoleUI(){
- const owner=['owner','admin'].includes(role);
- document.querySelectorAll('.owner-only').forEach(x=>x.style.display=owner?'':'none');
+ const fullView=['owner','admin','technical_support'].includes(role);
+ const tech=role==='technical_support';
+ document.querySelectorAll('.owner-only').forEach(x=>x.style.display=fullView?'':'none');
  const adminBtn=document.querySelector('.nav button[onclick*="admin"]');
- if(adminBtn) adminBtn.style.display=owner?'':'none';
- document.querySelector('.nav').style.gridTemplateColumns=owner?'repeat(5,1fr)':'repeat(4,1fr)';
+ if(adminBtn) adminBtn.style.display=fullView?'':'none';
+ document.querySelector('.nav').style.gridTemplateColumns=fullView?'repeat(5,1fr)':'repeat(4,1fr)';
+ // Soporte técnico: puede ver toda la información administrativa, pero no ejecutar acciones de propietario.
+ if(tech){
+   document.querySelectorAll('.owner-only').forEach(x=>{
+     if(x.tagName==='BUTTON'){x.disabled=true;x.title='Solo lectura para soporte técnico';x.style.opacity='.55';x.style.cursor='not-allowed'}
+     x.querySelectorAll?.('button').forEach(b=>{b.disabled=true;b.title='Solo lectura para soporte técnico';b.style.opacity='.55';b.style.cursor='not-allowed'});
+   });
+ }
 }
 function todayLoans(){return loans.filter(l=>['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0)}
 function paidTodayForLoan(id){
@@ -357,7 +365,7 @@ function pendingTodayLoans(){return todayLoans().filter(l=>pendingTodayForLoan(l
 function localISOOffset(days){const d=new Date();d.setDate(d.getDate()+days);return d.toLocaleDateString('en-CA',{timeZone:'America/Costa_Rica'})}
 function movementDate(m){return String(m.occurred_at||'').slice(0,10)}
 function renderYesterdayClose(){
- if(!['owner','admin'].includes(role))return;
+ if(!['owner','admin','technical_support'].includes(role))return;
  const y=localISOOffset(-1);
  const before=cashMovements.filter(m=>movementDate(m)<y).reduce((s,m)=>s+Number(m.amount||0),0);
  const ym=cashMovements.filter(m=>movementDate(m)===y);
@@ -387,7 +395,7 @@ function render(){
  todayList.innerHTML=pendingLoans.map(l=>{const c=clientFor(l.client_id),bal=balanceForLoan(l.id),remaining=pendingTodayForLoan(l);return `<div class="card person"><div class="avatar">${(c.full_name||'?').split(' ').map(v=>v[0]).slice(0,2).join('')}</div><div class="info"><b>${clientDisplayName(c)}</b><small>Pendiente hoy ${money(remaining)} · Saldo ${money(bal)}</small></div><button class="primary" onclick="openPay('${l.id}')">Cobrar</button></div>`}).join('')||'<div class="empty">✓ Cobros de hoy completados.</div>';
  renderQuickCollection();renderLoans();renderClients();renderMorosos();renderAdmin();
  document.getElementById('todayLabel').textContent=new Intl.DateTimeFormat('es-CR',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'America/Costa_Rica'}).format(new Date());
- if(['owner','admin'].includes(role)&&document.getElementById('reportFrom')&&!document.getElementById('reportFrom').value){
+ if(['owner','admin','technical_support'].includes(role)&&document.getElementById('reportFrom')&&!document.getElementById('reportFrom').value){
    setReportPeriod('current');
  }
 }
@@ -761,7 +769,7 @@ function printReport(){
 </body></html>`);
  w.document.close();
 }
-function renderAdmin(){if(!['owner','admin'].includes(role))return;
+function renderAdmin(){if(!['owner','admin','technical_support'].includes(role))return;
  capitalOut.textContent=money(loans.reduce((s,l)=>s+Number(l.principal),0));portfolio.textContent=money(loans.reduce((s,l)=>s+balanceForLoan(l.id),0));activeCount.textContent=todayLoans().length;refiCount.textContent=cycles.filter(c=>Number(c.cycle_number)>1).length;
  const capTotal=capitalContributions.reduce((s,x)=>s+Number(x.amount||0),0),cash=cashMovements.reduce((s,m)=>s+Number(m.amount||0),0);
  capitalTotal.textContent=money(capTotal);capitalAvailable.textContent=money(cash);
