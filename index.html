@@ -60,7 +60,7 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
 </style>
 
 <style>
-/* V18 — caja corregida + créditos realizados por fecha */
+/* V19 — caja corregida + créditos realizados por fecha */
 #sheet textarea,
 .sheet textarea,
 .modal textarea {
@@ -160,6 +160,12 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
  <div class="sub">Consulta en pantalla los créditos nuevos entregados en una fecha. Las tarjetas antiguas migradas no se incluyen.</div>
  <label>Fecha</label><input id="recentCreditDate" type="date" onchange="renderRecentCreditsByDate()">
  <div id="recentCreditsResult" style="margin-top:10px"></div>
+</div>
+<div class="card owner-only" id="recentPaymentsAdmin" style="margin-top:10px">
+ <div class="section-title" style="margin:0 0 8px"><h2>💰 Cobros por fecha</h2></div>
+ <div class="sub">Consulta quién pagó, cuánto pagó y quién terminó de cancelar su crédito.</div>
+ <label>Fecha</label><input id="recentPaymentDate" type="date" onchange="renderRecentPaymentsByDate()">
+ <div id="recentPaymentsResult" style="margin-top:10px"></div>
 </div>
 <div class="card owner-only" id="reportsAdmin" style="margin-top:10px">
   <div class="section-title" style="margin:0 0 6px"><h2>Reportes</h2></div>
@@ -768,6 +774,17 @@ function renderRecentCreditsByDate(){
  const total=list.reduce((s,l)=>s+Number(l.principal||0),0);
  box.innerHTML=`<div class="grid" style="margin-top:8px"><div class="stat"><small>Créditos realizados</small><b>${list.length}</b></div><div class="stat"><small>Monto entregado</small><b>${money(total)}</b></div></div>`+(list.length?list.map(l=>{const c=clientFor(l.client_id);return `<div class="card" style="margin-top:8px"><div class="loan-top"><div><b>${clientDisplayName(c)}</b><div class="sub">${l.collector_name_snapshot?'Cobrador: '+l.collector_name_snapshot+' · ':''}${fmtDate(l.start_date)}</div></div><div class="balance">${money(l.principal)}</div></div></div>`}).join(''):'<div class="empty">No hay créditos nuevos registrados en esta fecha.</div>');
 }
+function renderRecentPaymentsByDate(){
+ const input=document.getElementById('recentPaymentDate'),box=document.getElementById('recentPaymentsResult');
+ if(!input||!box)return;
+ if(!input.value)input.value=todayISO();
+ const d=input.value;
+ const list=payments.filter(p=>String(p.payment_date||'').slice(0,10)===d).sort((a,b)=>String(a.created_at||a.payment_date||'').localeCompare(String(b.created_at||b.payment_date||'')));
+ const total=list.reduce((s,p)=>s+Number(p.amount||0),0);
+ const paidOff=list.filter(p=>{const r=receiptData(p.id);return r&&r.after<=0.009}).length;
+ box.innerHTML=`<div class="grid" style="margin-top:8px"><div class="stat"><small>Pagos recibidos</small><b>${list.length}</b></div><div class="stat"><small>Total cobrado</small><b>${money(total)}</b></div><div class="stat"><small>Quedaron en ₡0</small><b>${paidOff}</b></div></div>`+
+ (list.length?list.map(p=>{const l=loans.find(x=>x.id===p.loan_id),c=l?clientFor(l.client_id):null,r=receiptData(p.id),zero=r&&r.after<=0.009;return `<div class="card" style="margin-top:8px"><div class="loan-top"><div><b>${clientDisplayName(c)}</b><div class="sub">${p.payment_method==='sinpe'?'SINPE':'Efectivo'} · ${fmtDate(p.payment_date)}${zero?' · <b style="color:#16794b">PAGADO / SALDO ₡0</b>':''}</div></div><div class="balance">${money(p.amount)}</div></div><button class="secondary big" style="margin-top:7px" onclick="openPaymentReceipt('${p.id}')">📲 Ver / enviar recibo</button></div>`}).join(''):'<div class="empty">No hay cobros registrados en esta fecha.</div>');
+}
 function renderAdminDailySummary(){
  const input=document.getElementById('adminDailyDate');if(!input)return;
  if(!input.value)input.value=localISOOffset(-1);
@@ -785,6 +802,7 @@ function renderAdminDailySummary(){
 function renderAdmin(){if(!['owner','admin','technical_support'].includes(role))return;
  renderAdminDailySummary();
  renderRecentCreditsByDate();
+ renderRecentPaymentsByDate();
  renderCollectors();
 }
 function renderCollectors(){if(!collectorList)return;collectorList.innerHTML=collectors.map(c=>{let n=loans.filter(l=>l.collector_id===c.user_id&&balanceForLoan(l.id)>0).length;return `<div class="collector-row"><div class="avatar">${(c.full_name||'?')[0]}</div><div class="info"><b>${c.full_name}</b><small>${c.active?'Activo':'Inactivo'} · ${n} crédito(s)</small></div><div class="collector-actions">${c.active?`<button class="secondary" onclick="openReassignCollector('${c.user_id}')">Cartera</button><button class="danger" onclick="deactivateCollector('${c.user_id}')">Desactivar</button>`:'<span class="pill">INACTIVO</span>'}</div></div>`}).join('')||'<div class="empty">Todavía no hay cobradores.</div>'}
