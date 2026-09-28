@@ -431,8 +431,38 @@ function renderMorosos(){
  const list=morosos.filter(m=>[m.full_name,m.phone].some(v=>String(v||'').toLowerCase().includes(q)));
  const total=morosos.reduce((s,m)=>s+Number(m.opening_balance||0),0);
  const sm=document.getElementById('morosoSummary');if(sm)sm.textContent=`${morosos.length} cliente${morosos.length===1?'':'s'} · ${money(total)}`;
- box.innerHTML=list.map(m=>`<div class="card person" style="border-left:5px solid var(--warn)"><div class="avatar">⚠</div><div class="info"><b>${m.full_name}</b><small>${m.phone?m.phone+' · ':''}Saldo moroso ${money(m.opening_balance)}</small></div><span class="pill late">MOROSO</span></div>`).join('')||'<div class="empty">No se encontraron morosos.</div>';
+ box.innerHTML=list.map(m=>`<div class="card" style="border-left:5px solid var(--warn)"><div class="person" style="margin-bottom:0"><div class="avatar">⚠</div><div class="info"><b>${m.full_name}</b><small>${m.phone?m.phone+' · ':''}Saldo moroso ${money(m.opening_balance)}</small></div><span class="pill late">MOROSO</span></div>${['owner','admin'].includes(role)?`<button class="secondary big" style="margin-top:10px" onclick="openMorosoCollectionInstruction('${m.id}')">📲 Enviar cobro a Alex</button>`:''}</div>`).join('')||'<div class="empty">No se encontraron morosos.</div>';
 }
+function openMorosoCollectionInstruction(id){
+ const m=morosos.find(x=>x.id===id);if(!m)return;
+ if(!['owner','admin'].includes(role)){alert('Solo Iker o un administrador puede enviar instrucciones de cobro de morosos.');return}
+ const alexPhone=localStorage.getItem('c24_alex_phone')||'';
+ sheet.innerHTML=`<h3>📲 Enviar cobro a Alex</h3>
+ <div class="sub">Esta acción solo prepara una instrucción de cobro. No cambia el estado del moroso, no crea un crédito y no registra ningún pago.</div>
+ <div class="card" style="margin-top:12px;border-left:5px solid var(--warn)"><b>${m.full_name}</b><div class="sub">${m.phone?'Teléfono '+m.phone+' · ':''}Saldo moroso ${money(m.opening_balance)}</div></div>
+ <label>Monto que Alex debe cobrar</label><input id="morosoCollectAmount" type="number" min="1" step="1" placeholder="Ej. 10000">
+ <label>Observación para Alex</label><textarea id="morosoCollectNote" rows="3" placeholder="Opcional: referencia, acuerdo, horario, etc."></textarea>
+ <label>WhatsApp de Alex</label><input id="morosoAlexPhone" type="tel" value="${String(alexPhone).replace(/"/g,'&quot;')}" placeholder="8888-8888">
+ <div class="role-note">El número de Alex se recuerda únicamente en este dispositivo para no tener que escribirlo cada vez.</div>
+ <div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="sendMorosoCollectionInstruction('${m.id}')">Enviar por WhatsApp</button></div>`;
+ modal.classList.add('show');
+}
+function morosoCollectionInstructionText(m,amount,note){
+ return `CARTERA 24\nINSTRUCCIÓN DE COBRO – MOROSO\n\nCliente: ${m.full_name||'Cliente'}\nTeléfono del cliente: ${m.phone||'No registrado'}\nSaldo moroso total: ${money(m.opening_balance)}\nMonto indicado para cobrar: ${money(amount)}${note?`\nObservación: ${note}`:''}\n\nImportante: esta ficha es una instrucción de cobro. El saldo seguirá como moroso hasta que el dinero sea efectivamente cobrado y registrado en Cartera 24.`;
+}
+function sendMorosoCollectionInstruction(id){
+ const m=morosos.find(x=>x.id===id);if(!m)return;
+ const amount=Number(document.getElementById('morosoCollectAmount')?.value||0);
+ const note=(document.getElementById('morosoCollectNote')?.value||'').trim();
+ const rawPhone=(document.getElementById('morosoAlexPhone')?.value||'').trim();
+ if(!amount||amount<=0){alert('Indique el monto que Alex debe cobrar.');return}
+ if(amount>Number(m.opening_balance||0)){if(!confirm('El monto indicado es mayor que el saldo moroso total. ¿Desea continuar de todos modos?'))return}
+ const phone=whatsappNumber(rawPhone);
+ if(!phone){alert('Ingrese el número de WhatsApp de Alex.');return}
+ localStorage.setItem('c24_alex_phone',rawPhone);
+ window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(morosoCollectionInstructionText(m,amount,note)),'_blank');
+}
+
 function morosoMatch(name,phone){const n=String(name||'').trim().toLowerCase(),p=String(phone||'').replace(/\D/g,'');return morosos.find(m=>(p&&String(m.phone||'').replace(/\D/g,'')===p)||(n&&String(m.full_name||'').trim().toLowerCase()===n));}
 function openNewClient(){
  sheet.innerHTML=`<h3>Nuevo cliente</h3><div class="sub">El número de cliente se asigna automáticamente.</div>
