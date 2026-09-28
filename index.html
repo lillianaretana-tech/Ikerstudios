@@ -60,7 +60,7 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
 </style>
 
 <style>
-/* V14 — ajuste visual de formularios */
+/* V17 — caja corregida + créditos realizados por fecha */
 #sheet textarea,
 .sheet textarea,
 .modal textarea {
@@ -159,7 +159,13 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
   </div>
   <button class="secondary big" onclick="alert('En la versión final aquí se generará el reporte mensual.')">Ver reporte</button>
  </div>
- <div class="card owner-only" id="reportsAdmin" style="margin-top:10px">
+ <div class="card owner-only" id="recentCreditsAdmin" style="margin-top:10px">
+ <div class="section-title" style="margin:0 0 8px"><h2>📅 Créditos realizados por fecha</h2></div>
+ <div class="sub">Consulta en pantalla los créditos nuevos entregados en una fecha. Las tarjetas antiguas migradas no se incluyen.</div>
+ <label>Fecha</label><input id="recentCreditDate" type="date" onchange="renderRecentCreditsByDate()">
+ <div id="recentCreditsResult" style="margin-top:10px"></div>
+</div>
+<div class="card owner-only" id="reportsAdmin" style="margin-top:10px">
   <div class="section-title" style="margin:0 0 6px"><h2>Reportes</h2></div>
   <div class="sub">Reportes semanal, quincenal, mensual, por cierre y por período personalizado; listos para guardar o compartir.</div>
 
@@ -588,7 +594,7 @@ function toggleCustomReport(){
 }
 function reportData(){
  const from=document.getElementById('reportFrom').value,to=document.getElementById('reportTo').value;
- const rLoans=loans.filter(l=>inRange(l.start_date,from,to));
+ const rLoans=loans.filter(l=>inRange(l.start_date,from,to)&&l.source_type!=='physical_card');
  const rPayments=payments.filter(p=>inRange(p.payment_date,from,to));
  const rExpenses=loanExpenses.filter(e=>inRange(e.expense_date,from,to));
  const rCapital=capitalContributions.filter(x=>inRange(x.contribution_date,from,to));
@@ -769,11 +775,21 @@ function printReport(){
 </body></html>`);
  w.document.close();
 }
+function renderRecentCreditsByDate(){
+ const input=document.getElementById('recentCreditDate'),box=document.getElementById('recentCreditsResult');
+ if(!input||!box)return;
+ if(!input.value)input.value=todayISO();
+ const d=input.value;
+ const list=loans.filter(l=>String(l.start_date||'').slice(0,10)===d&&l.source_type!=='physical_card').sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
+ const total=list.reduce((s,l)=>s+Number(l.principal||0),0);
+ box.innerHTML=`<div class="grid" style="margin-top:8px"><div class="stat"><small>Créditos realizados</small><b>${list.length}</b></div><div class="stat"><small>Monto entregado</small><b>${money(total)}</b></div></div>`+(list.length?list.map(l=>{const c=clientFor(l.client_id);return `<div class="card" style="margin-top:8px"><div class="loan-top"><div><b>${clientDisplayName(c)}</b><div class="sub">${l.collector_name_snapshot?'Cobrador: '+l.collector_name_snapshot+' · ':''}${fmtDate(l.start_date)}</div></div><div class="balance">${money(l.principal)}</div></div></div>`}).join(''):'<div class="empty">No hay créditos nuevos registrados en esta fecha.</div>');
+}
 function renderAdmin(){if(!['owner','admin','technical_support'].includes(role))return;
  capitalOut.textContent=money(loans.reduce((s,l)=>s+Number(l.principal),0));portfolio.textContent=money(loans.reduce((s,l)=>s+balanceForLoan(l.id),0));activeCount.textContent=todayLoans().length;refiCount.textContent=cycles.filter(c=>Number(c.cycle_number)>1).length;
  const capTotal=capitalContributions.reduce((s,x)=>s+Number(x.amount||0),0),cash=cashMovements.reduce((s,m)=>s+Number(m.amount||0),0);
  capitalTotal.textContent=money(capTotal);capitalAvailable.textContent=money(cash);
  capitalHistory.innerHTML=capitalContributions.length?capitalContributions.map(x=>`<div class="card" style="margin-top:8px"><b>${x.contribution_type==='initial'?'Capital inicial':'Aporte de capital'}</b><div class="sub">${money(x.amount)} · ${fmtDate(x.contribution_date)}${x.notes?' · '+x.notes:''}</div></div>`).join(''):'<div class="empty">Todavía no hay capital registrado.</div>';
+ renderRecentCreditsByDate();
  renderCollectors()
 }
 function renderCollectors(){if(!collectorList)return;collectorList.innerHTML=collectors.map(c=>{let n=loans.filter(l=>l.collector_id===c.user_id&&balanceForLoan(l.id)>0).length;return `<div class="collector-row"><div class="avatar">${(c.full_name||'?')[0]}</div><div class="info"><b>${c.full_name}</b><small>${c.active?'Activo':'Inactivo'} · ${n} crédito(s)</small></div><div class="collector-actions">${c.active?`<button class="secondary" onclick="openReassignCollector('${c.user_id}')">Cartera</button><button class="danger" onclick="deactivateCollector('${c.user_id}')">Desactivar</button>`:'<span class="pill">INACTIVO</span>'}</div></div>`}).join('')||'<div class="empty">Todavía no hay cobradores.</div>'}
@@ -893,7 +909,7 @@ async function pay(id){
  setLoading(true);
  const {data:p,error}=await sb.from('loans_payments').insert({loan_id:id,cycle_id:cy.id,amount:a,payment_date:todayISO(),payment_method:method,received_by:session.user.id,created_by:session.user.id}).select().single();
  if(error){setLoading(false);alert(error.message);return}
- if(method==='cash')await sb.from('loans_cash_movements').insert({movement_type:'payment',amount:a,loan_id:id,payment_id:p.id,created_by:session.user.id});
+ await sb.from('loans_cash_movements').insert({movement_type:'payment',amount:a,loan_id:id,payment_id:p.id,created_by:session.user.id,notes:method==='sinpe'?'Cobro recibido por SINPE':'Cobro recibido en efectivo'});
  window._quickPay=null;await auditEvent('payment_recorded','payment',p.id,null,{loan_id:id,amount:a,payment_method:method});await loadAll();setLoading(false);openPaymentReceipt(p.id);
 }
 function openExpense(){sheet.innerHTML=`<h3>Registrar gasto</h3><label>Concepto</label><input id="expenseConcept" placeholder="Ej. transporte"><label>Monto</label><input id="expenseAmount" type="number" placeholder="0"><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveExpense()">Guardar</button></div>`;modal.classList.add('show')}
