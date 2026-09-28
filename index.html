@@ -60,7 +60,7 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
 </style>
 
 <style>
-/* V17 — caja corregida + créditos realizados por fecha */
+/* V18 — caja corregida + créditos realizados por fecha */
 #sheet textarea,
 .sheet textarea,
 .modal textarea {
@@ -143,21 +143,17 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
 </section>
 
 <section id="admin" class="view">
- <div class="section-title"><h2>Administrador</h2><span class="sub">Resumen general</span></div>
- <div class="grid">
-  <div class="stat"><small>Capital colocado</small><b id="capitalOut"></b></div>
-  <div class="stat"><small>Saldo por cobrar</small><b id="portfolio"></b></div>
-  <div class="stat"><small>Créditos activos</small><b id="activeCount"></b></div>
-  <div class="stat"><small>Refinanciados</small><b id="refiCount"></b></div>
- </div>
- <div class="card">
-  <b>Consulta mensual</b>
-  <label>Mes</label><input type="month" value="2026-09">
-  <div class="grid">
-   <div><small class="sub">Cobros</small><div class="balance">₡315.000</div></div>
-   <div><small class="sub">Préstamos</small><div class="balance">₡210.000</div></div>
+ <div class="section-title"><h2>Administrador</h2><span class="sub">Control diario</span></div>
+ <div class="card" id="dailyAdminSummary">
+  <div class="section-title" style="margin:0 0 8px"><h2>Resumen por día</h2></div>
+  <label>Fecha</label><input id="adminDailyDate" type="date" onchange="renderAdminDailySummary()">
+  <div class="grid" style="margin-top:10px">
+   <div class="stat"><small>Disponible inicial para prestar</small><b id="adminDayInitial">₡0</b></div>
+   <div class="stat"><small>Cobros recibidos</small><b id="adminDayCollected">₡0</b></div>
+   <div class="stat"><small>Préstamos realizados</small><b id="adminDayLoans">₡0</b></div>
+   <div class="stat"><small>Gastos</small><b id="adminDayExpenses">₡0</b></div>
+   <div class="stat"><small>Disponible al cierre</small><b id="adminDayFinal">₡0</b></div>
   </div>
-  <button class="secondary big" onclick="alert('En la versión final aquí se generará el reporte mensual.')">Ver reporte</button>
  </div>
  <div class="card owner-only" id="recentCreditsAdmin" style="margin-top:10px">
  <div class="section-title" style="margin:0 0 8px"><h2>📅 Créditos realizados por fecha</h2></div>
@@ -189,15 +185,6 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
    <button class="secondary" style="min-width:145px;flex:1;padding:14px" onclick="printReport()">⬇ Descargar PDF</button>
   </div>
   <div id="reportResult" style="margin-top:12px"></div>
- </div>
- <div class="card owner-only" id="capitalAdmin" style="margin-top:10px">
-  <div class="section-title" style="margin:0 0 8px"><h2>Capital de la cartera</h2><button class="primary" onclick="openCapital()">＋ Registrar</button></div>
-  <div class="sub">Registra el capital inicial y cualquier aporte adicional. Todo queda con fecha e historial.</div>
-  <div class="grid" style="margin-top:10px">
-   <div><small class="sub">Capital aportado</small><div class="balance" id="capitalTotal">₡0</div></div>
-   <div><small class="sub">Disponible actual</small><div class="balance" id="capitalAvailable">₡0</div></div>
-  </div>
-  <div id="capitalHistory" style="margin-top:10px"></div>
  </div>
  <div class="card owner-only" id="collectorAdmin" style="margin-top:10px">
   <div class="section-title" style="margin:0 0 8px"><h2>Cobradores</h2><button class="primary" onclick="openNewCollector()">＋ Agregar</button></div>
@@ -369,7 +356,7 @@ function scheduledTodayForLoan(l){return Math.min(Number(l.expected_payment||0),
 function pendingTodayForLoan(l){return Math.max(0,scheduledTodayForLoan(l)-paidTodayForLoan(l.id))}
 function pendingTodayLoans(){return todayLoans().filter(l=>pendingTodayForLoan(l)>0)}
 function localISOOffset(days){const d=new Date();d.setDate(d.getDate()+days);return d.toLocaleDateString('en-CA',{timeZone:'America/Costa_Rica'})}
-function movementDate(m){return String(m.occurred_at||'').slice(0,10)}
+function movementDate(m){if(!m?.occurred_at)return '';return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Costa_Rica',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(m.occurred_at))}
 function renderYesterdayClose(){
  if(!['owner','admin','technical_support'].includes(role))return;
  const y=localISOOffset(-1);
@@ -603,12 +590,14 @@ function reportData(){
  const spent=rExpenses.reduce((s,e)=>s+Number(e.amount||0),0);
  const capital=rCapital.reduce((s,x)=>s+Number(x.amount||0),0);
  const portfolio=loans.filter(l=>['active','refinanced'].includes(l.status)).reduce((s,l)=>s+balanceForLoan(l.id),0);
- const available=cashMovements.reduce((s,m)=>s+Number(m.amount||0),0);
+ const openingAvailable=cashMovements.filter(m=>movementDate(m)<from).reduce((s,m)=>s+Number(m.amount||0),0);
+ const periodCash=cashMovements.filter(m=>inRange(movementDate(m),from,to)).reduce((s,m)=>s+Number(m.amount||0),0);
+ const available=openingAvailable+periodCash;
  const cashResult=collected-spent-placed;
- const activeNow=loans.filter(l=>l.status==='active').length;
+ const activeNow=loans.filter(l=>['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0).length;
  const paidInPeriod=rLoans.filter(l=>l.status==='paid').length;
  const refinancedInPeriod=rLoans.filter(l=>l.status==='refinanced').length;
- return {from,to,rLoans,rPayments,rExpenses,rCapital,placed,collected,spent,capital,portfolio,available,cashResult,activeNow,paidInPeriod,refinancedInPeriod};
+ return {from,to,rLoans,rPayments,rExpenses,rCapital,placed,collected,spent,capital,portfolio,openingAvailable,available,cashResult,activeNow,paidInPeriod,refinancedInPeriod};
 }
 function reportCard(label,value,note=''){
  return `<div class="stat"><small>${label}</small><b>${money(value)}</b>${note?`<div class="sub" style="margin-top:4px">${note}</div>`:''}</div>`;
@@ -623,20 +612,15 @@ function renderReport(){
    <div style="font-weight:800;font-size:18px">Informe de Cartera 24</div>
    <div class="sub">Período: ${periodLabel(r.from,r.to)}</div>
    <div class="grid" style="margin-top:12px">
-    ${reportCard('Préstamos colocados',r.placed)}
+    ${reportCard('Disponible inicial para prestar',r.openingAvailable)}
     ${reportCard('Cobros recibidos',r.collected)}
+    ${reportCard('Préstamos realizados',r.placed)}
     ${reportCard('Gastos',r.spent)}
-    ${reportCard('Movimiento operativo de caja',r.cashResult,'Cobros recibidos − gastos − préstamos entregados')}
-    ${reportCard('Capital aportado',r.capital,'Dinero puesto por el propietario; no es ganancia')}
-    ${reportCard('Cartera pendiente actual',r.portfolio)}
-    ${reportCard('Disponible para prestar',r.available)}
+    ${reportCard('Disponible al cierre',r.available)}
     <div class="stat"><small>Préstamos nuevos</small><b>${r.rLoans.length}</b></div>
     <div class="stat"><small>Préstamos activos actuales</small><b>${r.activeNow}</b></div>
     <div class="stat"><small>Pagados del período</small><b>${r.paidInPeriod}</b></div>
     <div class="stat"><small>Refinanciados del período</small><b>${r.refinancedInPeriod}</b></div>
-   </div>
-   <div style="margin-top:12px;padding:10px;border-radius:12px;background:#f4e8dc;font-size:13px">
-     <b>Lectura rápida:</b> el capital aportado se presenta por separado. El movimiento operativo de caja muestra cuánto efectivo entró o salió por cobros, gastos y préstamos entregados. Un valor negativo no significa necesariamente una pérdida: puede reflejar dinero que salió para financiar nuevos préstamos.
    </div>
  </div>`;
 }
@@ -784,13 +768,24 @@ function renderRecentCreditsByDate(){
  const total=list.reduce((s,l)=>s+Number(l.principal||0),0);
  box.innerHTML=`<div class="grid" style="margin-top:8px"><div class="stat"><small>Créditos realizados</small><b>${list.length}</b></div><div class="stat"><small>Monto entregado</small><b>${money(total)}</b></div></div>`+(list.length?list.map(l=>{const c=clientFor(l.client_id);return `<div class="card" style="margin-top:8px"><div class="loan-top"><div><b>${clientDisplayName(c)}</b><div class="sub">${l.collector_name_snapshot?'Cobrador: '+l.collector_name_snapshot+' · ':''}${fmtDate(l.start_date)}</div></div><div class="balance">${money(l.principal)}</div></div></div>`}).join(''):'<div class="empty">No hay créditos nuevos registrados en esta fecha.</div>');
 }
+function renderAdminDailySummary(){
+ const input=document.getElementById('adminDailyDate');if(!input)return;
+ if(!input.value)input.value=localISOOffset(-1);
+ const d=input.value;
+ const initial=cashMovements.filter(m=>movementDate(m)<d).reduce((s,m)=>s+Number(m.amount||0),0);
+ const dm=cashMovements.filter(m=>movementDate(m)===d);
+ const collected=dm.filter(m=>m.movement_type==='payment').reduce((s,m)=>s+Number(m.amount||0),0);
+ const placed=Math.abs(dm.filter(m=>m.movement_type==='loan_disbursement').reduce((s,m)=>s+Number(m.amount||0),0));
+ const spent=Math.abs(dm.filter(m=>m.movement_type==='expense').reduce((s,m)=>s+Number(m.amount||0),0));
+ const other=dm.filter(m=>!['payment','loan_disbursement','expense'].includes(m.movement_type)).reduce((s,m)=>s+Number(m.amount||0),0);
+ const final=initial+collected-placed-spent+other;
+ const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=money(v)};
+ set('adminDayInitial',initial);set('adminDayCollected',collected);set('adminDayLoans',placed);set('adminDayExpenses',spent);set('adminDayFinal',final);
+}
 function renderAdmin(){if(!['owner','admin','technical_support'].includes(role))return;
- capitalOut.textContent=money(loans.reduce((s,l)=>s+Number(l.principal),0));portfolio.textContent=money(loans.reduce((s,l)=>s+balanceForLoan(l.id),0));activeCount.textContent=todayLoans().length;refiCount.textContent=cycles.filter(c=>Number(c.cycle_number)>1).length;
- const capTotal=capitalContributions.reduce((s,x)=>s+Number(x.amount||0),0),cash=cashMovements.reduce((s,m)=>s+Number(m.amount||0),0);
- capitalTotal.textContent=money(capTotal);capitalAvailable.textContent=money(cash);
- capitalHistory.innerHTML=capitalContributions.length?capitalContributions.map(x=>`<div class="card" style="margin-top:8px"><b>${x.contribution_type==='initial'?'Capital inicial':'Aporte de capital'}</b><div class="sub">${money(x.amount)} · ${fmtDate(x.contribution_date)}${x.notes?' · '+x.notes:''}</div></div>`).join(''):'<div class="empty">Todavía no hay capital registrado.</div>';
+ renderAdminDailySummary();
  renderRecentCreditsByDate();
- renderCollectors()
+ renderCollectors();
 }
 function renderCollectors(){if(!collectorList)return;collectorList.innerHTML=collectors.map(c=>{let n=loans.filter(l=>l.collector_id===c.user_id&&balanceForLoan(l.id)>0).length;return `<div class="collector-row"><div class="avatar">${(c.full_name||'?')[0]}</div><div class="info"><b>${c.full_name}</b><small>${c.active?'Activo':'Inactivo'} · ${n} crédito(s)</small></div><div class="collector-actions">${c.active?`<button class="secondary" onclick="openReassignCollector('${c.user_id}')">Cartera</button><button class="danger" onclick="deactivateCollector('${c.user_id}')">Desactivar</button>`:'<span class="pill">INACTIVO</span>'}</div></div>`}).join('')||'<div class="empty">Todavía no hay cobradores.</div>'}
 function freqLabel(v){return ({daily:'Diario',weekly:'Semanal',custom:'Personalizado'})[v]||v}
