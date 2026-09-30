@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Cartera 24</title>
+<title>Cartera 24 V21</title>
  
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#3a2923">
@@ -149,7 +149,7 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
 
 <section id="admin" class="view">
  <div class="section-title"><h2>Administrador</h2><span class="sub">Control diario</span></div>
- <div class="card" id="dailyAdminSummary">
+ <div class="card collector-readable" id="dailyAdminSummary">
   <div class="section-title" style="margin:0"><h2>Resumen por día</h2><button class="secondary compact-toggle" id="dailySummaryToggle" onclick="toggleAdminPanel('dailySummaryBody','dailySummaryToggle',true)">▲ Ver menos</button></div>
   <div id="dailySummaryBody">
    <label>Fecha</label><input id="adminDailyDate" type="date" onchange="renderAdminDailySummary()">
@@ -162,7 +162,7 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
    </div>
   </div>
  </div>
- <div class="admin-quick owner-only" style="margin-top:10px">
+ <div class="admin-quick collector-readable" style="margin-top:10px">
   <button class="secondary big admin-module-btn" id="creditsDateToggle" onclick="toggleAdminPanel('recentCreditsBody','creditsDateToggle')">📅 Créditos por fecha <span>▼</span></button>
   <div class="card admin-collapsible" id="recentCreditsBody" style="display:none;margin-top:8px">
    <div class="sub">Consulta los créditos nuevos entregados en una fecha. Las tarjetas antiguas migradas no se incluyen.</div>
@@ -221,7 +221,7 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
   <p class="sub">Ciclo de 24 días · 20% fijo. Al vencimiento, el saldo pendiente inicia un nuevo ciclo con 20%.</p>
  </div>
 </section>
-<footer>Desarrollado por LillyTech · 3RS Integrated Solutions</footer>
+<footer>Desarrollado por LillyTech · 3RS Integrated Solutions · V21</footer>
 </main>
 
 <nav class="nav">
@@ -242,6 +242,8 @@ const SUPABASE_URL='https://mzsxdobicqmbnajqpbfe.supabase.co';
 const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16c3hkb2JpY3FtYm5hanFwYmZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3ODA2ODcsImV4cCI6MjEwNTM1NjY4N30.SPjpl7XtuDUFRwESMf-ccpbGDPK2WiBLjQru5drlnKk';
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const money=n=>'₡'+Math.round(Number(n||0)).toLocaleString('es-CR');
+const ALEX_COLLECTOR_ID='38b5b477-0619-42ab-8f88-b65390146352';
+const ALEX_COLLECTOR_NAME='Alex';
 let session=null, role=null, clients=[], loans=[], cycles=[], payments=[], loanExpenses=[], cashMovements=[], capitalContributions=[], collectors=[], morosos=[];
 const todayISO=()=>new Date().toLocaleDateString('en-CA',{timeZone:'America/Costa_Rica'});
 const fmtDate=s=>{if(!s)return '—';let [y,m,d]=s.slice(0,10).split('-');return `${d}/${m}/${y}`};
@@ -327,6 +329,7 @@ async function enterApp(){
 }
 async function loadAll(){
  const owner=['owner','admin','technical_support'].includes(role);
+ const operationalRead=owner||role==='collector';
  const base=[
   sb.from('loans_clients').select('*').eq('active',true).order('full_name'),
   sb.from('loans_loans').select('*').order('created_at',{ascending:false}),
@@ -334,11 +337,12 @@ async function loadAll(){
   sb.from('loans_payments').select('*').order('payment_date',{ascending:false}),
    sb.from('loans_morosos').select('*').order('full_name')
  ];
- if(owner){base.push(sb.from('loans_expenses').select('*').order('expense_date',{ascending:false}),sb.from('loans_cash_movements').select('*').order('occurred_at',{ascending:false}),sb.from('loans_capital_contributions').select('*').order('contribution_date',{ascending:false}).order('created_at',{ascending:false}))}
+ if(operationalRead){base.push(sb.from('loans_expenses').select('*').order('expense_date',{ascending:false}),sb.from('loans_cash_movements').select('*').order('occurred_at',{ascending:false}))}
+ if(owner){base.push(sb.from('loans_capital_contributions').select('*').order('contribution_date',{ascending:false}).order('created_at',{ascending:false}))}
  const res=await Promise.all(base); const err=res.find(x=>x.error)?.error;
  if(err){alert('No se pudieron cargar los datos: '+err.message);return}
  clients=res[0].data||[];loans=res[1].data||[];cycles=res[2].data||[];payments=res[3].data||[];morosos=res[4].data||[];
- loanExpenses=owner?(res[5].data||[]):[]; cashMovements=owner?(res[6].data||[]):[]; capitalContributions=owner?(res[7].data||[]):[];
+ loanExpenses=operationalRead?(res[5].data||[]):[]; cashMovements=operationalRead?(res[6].data||[]):[]; capitalContributions=owner?(res[7].data||[]):[];
  if(owner) await loadCollectors(); else collectors=[];
  render();
 }
@@ -351,11 +355,13 @@ async function loadCollectors(){
 }
 function applyRoleUI(){
  const fullView=['owner','admin','technical_support'].includes(role);
+ const collectorView=role==='collector';
  const tech=role==='technical_support';
  document.querySelectorAll('.owner-only').forEach(x=>x.style.display=fullView?'':'none');
+ document.querySelectorAll('.collector-readable').forEach(x=>x.style.display=(fullView||collectorView)?'':'none');
  const adminBtn=document.querySelector('.nav button[onclick*="admin"]');
- if(adminBtn) adminBtn.style.display=fullView?'':'none';
- document.querySelector('.nav').style.gridTemplateColumns=fullView?'repeat(5,1fr)':'repeat(4,1fr)';
+ if(adminBtn) adminBtn.style.display=(fullView||collectorView)?'':'none';
+ document.querySelector('.nav').style.gridTemplateColumns=(fullView||collectorView)?'repeat(5,1fr)':'repeat(4,1fr)';
  // Soporte técnico: puede ver toda la información administrativa, pero no ejecutar acciones de propietario.
  if(tech){
    document.querySelectorAll('.owner-only').forEach(x=>{
@@ -822,7 +828,7 @@ function renderAdminDailySummary(){
  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=money(v)};
  set('adminDayInitial',initial);set('adminDayCollected',collected);set('adminDayLoans',placed);set('adminDayExpenses',spent);set('adminDayFinal',final);
 }
-function renderAdmin(){if(!['owner','admin','technical_support'].includes(role))return;
+function renderAdmin(){if(!['owner','admin','technical_support','collector'].includes(role))return;
  renderAdminDailySummary();
  renderRecentCreditsByDate();
  renderRecentPaymentsByDate();
@@ -1019,9 +1025,9 @@ async function savePhysicalCardImport(){
  closeModal();await loadAll();go('loans',document.querySelectorAll('.nav button')[1]);alert('Tarjeta migrada correctamente. Revise el saldo antes de continuar con cobros.');
 }
 
-function openNewLoan(){const active=collectors.filter(c=>c.active);sheet.innerHTML=`<h3>Nuevo préstamo</h3><label>Cliente</label><select id="existingClient"><option value="">＋ Cliente nuevo</option>${clients.map(c=>`<option value="${c.id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select><label>Nombre del cliente nuevo</label><input id="newName" placeholder="Nombre completo"><label>Identificación (opcional)</label><input id="newIdentification" placeholder="Cédula / identificación"><label>Teléfono (opcional)</label><input id="newPhone" placeholder="8888-8888"><label>Dirección / referencia (opcional)</label><textarea id="newAddress" rows="2" placeholder="Dirección o punto de referencia"></textarea><label>Notas del cliente (opcional)</label><textarea id="newClientNotes" rows="2" placeholder="Información útil"></textarea><label>Monto entregado</label><input id="newPrincipal" type="number" placeholder="100000" oninput="calcNew()"><div class="row"><div><label>Interés</label><input value="20%" disabled></div><div><label>Total a cobrar</label><input id="newTotal" disabled></div></div><div class="row"><div><label>Plazo</label><input value="24 días" disabled></div><div><label>Frecuencia</label><select id="newFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select></div></div><label>Monto esperado por cobro</label><input id="newPayment" type="number" placeholder="5000"><label>Cobrador asignado</label><select id="newCollector"><option value="">Sin asignar / Iker</option>${active.map(c=>`<option value="${c.user_id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveLoan()">Crear préstamo</button></div>`;modal.classList.add('show')}
+function openNewLoan(){const active=collectors.filter(c=>c.active);sheet.innerHTML=`<h3>Nuevo préstamo</h3><label>Cliente</label><select id="existingClient"><option value="">＋ Cliente nuevo</option>${clients.map(c=>`<option value="${c.id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select><label>Nombre del cliente nuevo</label><input id="newName" placeholder="Nombre completo"><label>Identificación (opcional)</label><input id="newIdentification" placeholder="Cédula / identificación"><label>Teléfono (opcional)</label><input id="newPhone" placeholder="8888-8888"><label>Dirección / referencia (opcional)</label><textarea id="newAddress" rows="2" placeholder="Dirección o punto de referencia"></textarea><label>Notas del cliente (opcional)</label><textarea id="newClientNotes" rows="2" placeholder="Información útil"></textarea><label>Monto entregado</label><input id="newPrincipal" type="number" placeholder="100000" oninput="calcNew()"><div class="row"><div><label>Interés</label><input value="20%" disabled></div><div><label>Total a cobrar</label><input id="newTotal" disabled></div></div><div class="row"><div><label>Plazo</label><input value="24 días" disabled></div><div><label>Frecuencia</label><select id="newFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select></div></div><label>Monto esperado por cobro</label><input id="newPayment" type="number" placeholder="5000"><label>Cobrador asignado</label><input value="Alex" disabled><input id="newCollector" type="hidden" value="${ALEX_COLLECTOR_ID}"><div class="role-note">Todos los créditos nuevos se asignan automáticamente a Alex.</div><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveLoan()">Crear préstamo</button></div>`;modal.classList.add('show')}
 function calcNew(){newTotal.value=money(Number(newPrincipal.value||0)*1.2)}
-async function saveLoan(){let p=Number(newPrincipal.value),pay=Number(newPayment.value),clientId=existingClient.value;if(!p||!pay){alert('Complete monto y cobro esperado.');return}const existing=clients.find(c=>c.id===clientId);const mm=morosoMatch(existing?.full_name||newName.value,existing?.phone||newPhone.value);if(mm){alert('⚠️ CLIENTE MOROSO\n\n'+mm.full_name+' mantiene una deuda morosa de '+money(mm.opening_balance)+'.\n\nNo se creará un crédito normal. Iker debe revisar y autorizar un acuerdo especial.');return}setLoading(true);if(!clientId){let name=newName.value.trim();if(!name){setLoading(false);alert('Indique el cliente.');return}const {data:c,error}=await sb.from('loans_clients').insert({full_name:name,identification:newIdentification.value.trim()||null,phone:newPhone.value.trim()||null,address:newAddress.value.trim()||null,notes:newClientNotes.value.trim()||null}).select().single();if(error){setLoading(false);alert(error.message);return}clientId=c.id}const collectorId=newCollector.value||null;const collector=collectors.find(c=>c.user_id===collectorId);const {data:l,error}=await sb.from('loans_loans').insert({client_id:clientId,principal:p,interest_rate:20,term_days:24,start_date:todayISO(),collection_frequency:newFreq.value,expected_payment:pay,collector_id:collectorId,collector_name_snapshot:collector?.full_name||null,created_by:session.user.id}).select().single();if(error){setLoading(false);alert(error.message);return}await auditEvent('loan_created','loan',l.id,null,{principal:p,interest_rate:20,client_id:clientId});if(collectorId)await sb.from('loans_collector_history').insert({loan_id:l.id,collector_id:collectorId,collector_name:collector.full_name,assigned_by:session.user.id});await sb.from('loans_cash_movements').insert({movement_type:'loan_disbursement',amount:-p,loan_id:l.id,created_by:session.user.id});closeModal();await loadAll();setLoading(false);go('loans',document.querySelectorAll('.nav button')[1])}
+async function saveLoan(){let p=Number(newPrincipal.value),pay=Number(newPayment.value),clientId=existingClient.value;if(!p||!pay){alert('Complete monto y cobro esperado.');return}const existing=clients.find(c=>c.id===clientId);const mm=morosoMatch(existing?.full_name||newName.value,existing?.phone||newPhone.value);if(mm){alert('⚠️ CLIENTE MOROSO\n\n'+mm.full_name+' mantiene una deuda morosa de '+money(mm.opening_balance)+'.\n\nNo se creará un crédito normal. Iker debe revisar y autorizar un acuerdo especial.');return}setLoading(true);if(!clientId){let name=newName.value.trim();if(!name){setLoading(false);alert('Indique el cliente.');return}const {data:c,error}=await sb.from('loans_clients').insert({full_name:name,identification:newIdentification.value.trim()||null,phone:newPhone.value.trim()||null,address:newAddress.value.trim()||null,notes:newClientNotes.value.trim()||null}).select().single();if(error){setLoading(false);alert(error.message);return}clientId=c.id}const collectorId=ALEX_COLLECTOR_ID;const collector=collectors.find(c=>c.user_id===collectorId)||{user_id:ALEX_COLLECTOR_ID,full_name:ALEX_COLLECTOR_NAME};const {data:l,error}=await sb.from('loans_loans').insert({client_id:clientId,principal:p,interest_rate:20,term_days:24,start_date:todayISO(),collection_frequency:newFreq.value,expected_payment:pay,collector_id:collectorId,collector_name_snapshot:collector?.full_name||null,created_by:session.user.id}).select().single();if(error){setLoading(false);alert(error.message);return}await auditEvent('loan_created','loan',l.id,null,{principal:p,interest_rate:20,client_id:clientId});if(collectorId)await sb.from('loans_collector_history').insert({loan_id:l.id,collector_id:collectorId,collector_name:collector.full_name,assigned_by:session.user.id});await sb.from('loans_cash_movements').insert({movement_type:'loan_disbursement',amount:-p,loan_id:l.id,created_by:session.user.id});closeModal();await loadAll();setLoading(false);go('loans',document.querySelectorAll('.nav button')[1])}
 function openCapital(){const hasInitial=capitalContributions.some(x=>x.contribution_type==='initial');sheet.innerHTML=`<h3>Registrar capital</h3><p class="sub">Este dinero aumenta el disponible para prestar y queda registrado en el historial.</p><label>Tipo</label><select id="capitalType">${hasInitial?'':'<option value="initial">Capital inicial</option>'}<option value="additional">Aporte adicional</option></select><label>Monto</label><input id="capitalAmount" type="number" min="1" placeholder="Ej. 500000"><label>Fecha</label><input id="capitalDate" type="date" value="${todayISO()}"><label>Nota (opcional)</label><input id="capitalNotes" placeholder="Ej. Capital de arranque"><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveCapital()">Guardar capital</button></div>`;modal.classList.add('show')}
 async function saveCapital(){const amount=Number(capitalAmount.value||0),type=capitalType.value,date=capitalDate.value||todayISO(),notes=capitalNotes.value.trim();if(amount<=0){alert('Indique un monto mayor que cero.');return}setLoading(true);const {error}=await sb.rpc('loans_register_capital',{p_amount:amount,p_type:type,p_date:date,p_notes:notes||null});setLoading(false);if(error){alert('No se pudo registrar el capital: '+error.message);return}closeModal();await loadAll();alert(type==='initial'?'Capital inicial registrado.':'Aporte de capital registrado.')}
 function openNewCollector(){sheet.innerHTML=`<h3>Agregar cobrador</h3><p class="sub">Iker crea el acceso directamente. No se envía correo de confirmación.</p><label>Nombre completo</label><input id="collectorName" autocomplete="off"><label>Correo / usuario</label><input id="collectorEmail" type="email" autocomplete="off"><label>Contraseña temporal</label><input id="collectorPassword" type="password" minlength="8" autocomplete="new-password"><div class="role-note">Mínimo 8 caracteres. Compártala con el cobrador por un medio privado.</div><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="createCollector()">Crear acceso</button></div>`;modal.classList.add('show')}
