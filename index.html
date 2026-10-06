@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Cartera 24 V21</title>
+<title>Cartera 24 V22</title>
  
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#3a2923">
@@ -76,6 +76,8 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
   box-sizing: border-box;
   resize: vertical;
 }
+.overdue-alert{margin:12px 0;padding:14px;border:2px solid #b42318;border-radius:14px;background:#fff1f0;color:#8f1d16;font-weight:900;text-align:center;letter-spacing:.03em}
+.closing-panel{margin-top:12px;padding:14px;border:1px solid #dbc8b9;border-radius:14px;background:#fffaf5}
 </style>
 
 </head>
@@ -186,10 +188,12 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
     <button class="secondary" style="min-width:120px;flex:1" onclick="setReportPeriod('week')">Semanal</button>
     <button class="secondary" style="min-width:120px;flex:1" onclick="setReportPeriod('fortnight')">Quincenal</button>
     <button class="secondary" style="min-width:120px;flex:1" onclick="setReportPeriod('month')">Mensual</button>
-    <button class="secondary" style="min-width:150px;flex:1" onclick="setReportPeriod('closing')">Cierre de Iker</button>
+    <button class="secondary" style="min-width:150px;flex:1" onclick="setReportPeriod('closing')">Último cierre</button>
     <button class="secondary" style="min-width:130px;flex:1" onclick="toggleCustomReport()">Personalizado</button>
   </div>
-  <div class="sub" style="margin-top:9px">El cierre de Iker se calcula automáticamente entre el primer sábado de un mes y el primer sábado del mes siguiente.</div>
+  <div class="sub" style="margin-top:9px">Iker decide cuándo cerrar. El sistema conserva todos los movimientos aunque el cierre se haga después.</div>
+  <div id="closingStatus" class="closing-panel"></div>
+  <button class="primary big" style="margin-top:10px" onclick="openManualClose()">✓ Cerrar período manualmente</button>
 
   <div id="customReportDates" class="grid" style="margin-top:10px;display:none">
    <div><label>Desde</label><input id="reportFrom" type="date"></div>
@@ -218,10 +222,10 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
  </div>
  <div class="card" style="margin-top:10px">
   <b>Regla del crédito</b>
-  <p class="sub">Ciclo de 24 días · 20% fijo. Al vencimiento, el saldo pendiente inicia un nuevo ciclo con 20%.</p>
+   <p class="sub">Modalidades de 7, 15, 24 o 30 días efectivos · 20% fijo. Los domingos no cuentan para duración ni vencimiento.</p>
  </div>
 </section>
-<footer>Desarrollado por LillyTech · 3RS Integrated Solutions · V21</footer>
+<footer>Desarrollado por LillyTech · 3RS Integrated Solutions · V22</footer>
 </main>
 
 <nav class="nav">
@@ -244,7 +248,9 @@ const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const money=n=>'₡'+Math.round(Number(n||0)).toLocaleString('es-CR');
 const ALEX_COLLECTOR_ID='38b5b477-0619-42ab-8f88-b65390146352';
 const ALEX_COLLECTOR_NAME='Alex';
-let session=null, role=null, clients=[], loans=[], cycles=[], payments=[], loanExpenses=[], cashMovements=[], capitalContributions=[], collectors=[], morosos=[];
+const INITIAL_CAPITAL=10000000;
+const FIRST_MANUAL_PERIOD_START='2026-10-05';
+let session=null, role=null, clients=[], loans=[], cycles=[], payments=[], loanExpenses=[], cashMovements=[], capitalContributions=[], collectors=[], morosos=[], closings=[];
 const todayISO=()=>new Date().toLocaleDateString('en-CA',{timeZone:'America/Costa_Rica'});
 const fmtDate=s=>{if(!s)return '—';let [y,m,d]=s.slice(0,10).split('-');return `${d}/${m}/${y}`};
 const cycleFor=id=>cycles.filter(c=>c.loan_id===id).sort((a,b)=>b.cycle_number-a.cycle_number)[0];
@@ -343,7 +349,11 @@ async function loadAll(){
  if(err){alert('No se pudieron cargar los datos: '+err.message);return}
  clients=res[0].data||[];loans=res[1].data||[];cycles=res[2].data||[];payments=res[3].data||[];morosos=res[4].data||[];
  loanExpenses=operationalRead?(res[5].data||[]):[]; cashMovements=operationalRead?(res[6].data||[]):[]; capitalContributions=owner?(res[7].data||[]):[];
- if(owner) await loadCollectors(); else collectors=[];
+  if(owner){
+   await loadCollectors();
+   const closeRes=await sb.from('loans_closings').select('*').order('closed_through',{ascending:false});
+   if(closeRes.error){console.warn('Aplique la migración V22 para activar cierres manuales.',closeRes.error);closings=[]}else closings=closeRes.data||[];
+  }else{collectors=[];closings=[]}
  render();
 }
 async function loadCollectors(){
@@ -375,7 +385,12 @@ function paidTodayForLoan(id){
  const today=todayISO();
  return payments.filter(p=>p.loan_id===id&&String(p.payment_date).slice(0,10)===today).reduce((s,p)=>s+Number(p.amount),0);
 }
-function scheduledTodayForLoan(l){return Math.min(Number(l.expected_payment||0),balanceForLoan(l.id)+paidTodayForLoan(l.id))}
+function isSundayISO(iso){if(!iso)return false;const [y,m,d]=iso.slice(0,10).split('-').map(Number);return new Date(Date.UTC(y,m-1,d)).getUTCDay()===0}
+function creditTodayISO(){const t=todayISO();if(!isSundayISO(t))return t;const [y,m,d]=t.split('-').map(Number),x=new Date(Date.UTC(y,m-1,d-1));return x.toISOString().slice(0,10)}
+function addEffectiveDays(start,days){const [y,m,d]=String(start).slice(0,10).split('-').map(Number),x=new Date(Date.UTC(y,m-1,d));let left=Number(days||0);while(left>0){x.setUTCDate(x.getUTCDate()+1);if(x.getUTCDay()!==0)left--}return x.toISOString().slice(0,10)}
+function loanTermDays(l){return Number(l?.effective_term_days||l?.term_days||24)}
+function termLabel(l){const days=loanTermDays(l);return l?.credit_term_code?'Plazo '+days+' días efectivos (sin domingos)':'Plazo histórico '+days+' días'}
+function scheduledTodayForLoan(l){if(isSundayISO(todayISO()))return 0;return Math.min(Number(l.expected_payment||0),balanceForLoan(l.id)+paidTodayForLoan(l.id))}
 function pendingTodayForLoan(l){return Math.max(0,scheduledTodayForLoan(l)-paidTodayForLoan(l.id))}
 function pendingTodayLoans(){return todayLoans().filter(l=>pendingTodayForLoan(l)>0)}
 function localISOOffset(days){const d=new Date();d.setDate(d.getDate()+days);return d.toLocaleDateString('en-CA',{timeZone:'America/Costa_Rica'})}
@@ -421,12 +436,13 @@ function renderQuickCollection(){const box=document.getElementById('quickResults
 function activeCycleForLoan(id){return cycles.filter(c=>c.loan_id===id&&c.status==='active').sort((a,b)=>Number(b.cycle_number)-Number(a.cycle_number))[0]||null}
 function cyclePaid(cycleId){return payments.filter(p=>p.cycle_id===cycleId).reduce((s,p)=>s+Number(p.amount||0),0)}
 function cycleRemaining(c){return Math.max(0,Number(c.amount_due||0)-cyclePaid(c.id))}
-function isCycleDue(c){return c&&todayISO()>=String(c.due_date).slice(0,10)}
-function loanCycleLabel(l){const c=activeCycleForLoan(l.id);return c?`Ciclo ${c.cycle_number} · vence ${fmtDate(c.due_date)}`:'Sin ciclo activo'}
+function isCycleDue(c){return c&&creditTodayISO()>=String(c.due_date).slice(0,10)}
+function isCycleOverdue(c){return c&&creditTodayISO()>String(c.due_date).slice(0,10)}
+function loanCycleLabel(l){const c=activeCycleForLoan(l.id);return c?`Ciclo ${c.cycle_number} · ${termLabel(l)} · vence ${fmtDate(c.due_date)}`:'Sin ciclo activo'}
 function renderLoans(){
  const active=loans.filter(l=>['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0);
  loanList.innerHTML=active.map(l=>{
-   const c=clientFor(l.client_id),bal=balanceForLoan(l.id),cy=activeCycleForLoan(l.id),due=cy&&isCycleDue(cy)&&cycleRemaining(cy)>0;
+    const c=clientFor(l.client_id),bal=balanceForLoan(l.id),cy=activeCycleForLoan(l.id),due=cy&&isCycleOverdue(cy)&&cycleRemaining(cy)>0;
    return `<div class="card">
     <div class="section-title" style="margin:0"><div><b>${c.full_name}</b><div class="sub">${loanCycleLabel(l)} · Saldo ${money(bal)}</div></div><span class="pill ${due?'danger':''}">${due?'Vencido':'Activo'}</span></div>
     ${due&&['owner','admin'].includes(role)?`<div class="sub" style="margin-top:8px">Saldo pendiente al vencimiento: <b>${money(cycleRemaining(cy))}</b>. Al refinanciar se aplicará 20% y se abrirá un nuevo ciclo de 24 días.</div>`:''}
@@ -569,10 +585,9 @@ function inRange(date,from,to){const d=String(date||'').slice(0,10);return d&&d>
 function isoLocalDate(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function prettyDate(s){if(!s)return '';const [y,m,d]=s.split('-');return `${d}/${m}/${y}`}
 function periodLabel(from,to){return `${prettyDate(from)} al ${prettyDate(to)}`}
-function firstSaturday(year,month){
- const d=new Date(year,month,1),add=(6-d.getDay()+7)%7;
- return new Date(year,month,1+add);
-}
+function addCalendarDaysISO(iso,days){const [y,m,d]=iso.split('-').map(Number),x=new Date(Date.UTC(y,m-1,d+days));return x.toISOString().slice(0,10)}
+function latestClosing(){return [...closings].sort((a,b)=>String(b.closed_through).localeCompare(String(a.closed_through)))[0]||null}
+function manualPeriodStart(){const last=latestClosing();return last?addCalendarDaysISO(String(last.closed_through).slice(0,10),1):FIRST_MANUAL_PERIOD_START}
 function setReportPeriod(which){
  const now=new Date(),fromEl=document.getElementById('reportFrom'),toEl=document.getElementById('reportTo');
  let a,b;
@@ -583,20 +598,52 @@ function setReportPeriod(which){
  }else if(which==='month'){
    a=new Date(now.getFullYear(),now.getMonth(),1);b=now;
  }else if(which==='closing'){
-   const thisClose=firstSaturday(now.getFullYear(),now.getMonth());
-   if(now>=thisClose){
-     a=thisClose;
-     b=firstSaturday(now.getFullYear(),now.getMonth()+1);
-   }else{
-     a=firstSaturday(now.getFullYear(),now.getMonth()-1);
-     b=thisClose;
-   }
+   const last=latestClosing();
+   if(last){fromEl.value=String(last.period_start).slice(0,10);toEl.value=String(last.closed_through).slice(0,10);document.getElementById('customReportDates').style.display='none';renderReport();return}
+   fromEl.value='2026-09-01';toEl.value='2026-10-04';document.getElementById('customReportDates').style.display='none';renderReport();return
+ }else if(which==='current'){
+   fromEl.value=manualPeriodStart();toEl.value=todayISO();document.getElementById('customReportDates').style.display='none';renderReport();return
  }else{
    a=new Date(now.getFullYear(),now.getMonth(),1);b=now;
  }
  fromEl.value=isoLocalDate(a);toEl.value=isoLocalDate(b);
  document.getElementById('customReportDates').style.display='none';
  renderReport();
+}
+function portfolioBalanceAt(to){
+ const totalByLoan=new Map();
+ loans.forEach(l=>{
+  const eligible=cycles.filter(c=>c.loan_id===l.id&&String(c.start_date||'').slice(0,10)<=to).sort((a,b)=>Number(b.cycle_number)-Number(a.cycle_number));
+  const cy=eligible[0];if(!cy)return;
+  const paid=payments.filter(p=>p.cycle_id===cy.id&&String(p.payment_date||'').slice(0,10)<=to).reduce((s,p)=>s+Number(p.amount||0),0);
+  totalByLoan.set(l.id,Math.max(0,Number(cy.amount_due||0)-paid));
+ });
+ return [...totalByLoan.values()].reduce((s,n)=>s+n,0);
+}
+function closureSnapshot(from,to){
+ const collected=payments.filter(p=>inRange(p.payment_date,from,to)).reduce((s,p)=>s+Number(p.amount||0),0);
+ const placed=loans.filter(l=>inRange(l.start_date,from,to)&&l.source_type!=='physical_card').reduce((s,l)=>s+Number(l.principal||0),0);
+ const spent=loanExpenses.filter(e=>inRange(e.expense_date,from,to)).reduce((s,e)=>s+Number(e.amount||0),0);
+ const openingCash=cashMovements.filter(m=>movementDate(m)<from).reduce((s,m)=>s+Number(m.amount||0),0);
+ const closingCash=cashMovements.filter(m=>movementDate(m)<=to).reduce((s,m)=>s+Number(m.amount||0),0);
+ const additionalCapital=capitalContributions.filter(x=>x.contribution_type!=='initial'&&String(x.contribution_date||'').slice(0,10)<=to).reduce((s,x)=>s+Number(x.amount||0),0);
+ const portfolioBalance=portfolioBalanceAt(to);
+ return {openingCash,collected,placed,spent,closingCash,initialCapital:INITIAL_CAPITAL,additionalCapital,portfolioBalance,totalPosition:closingCash+portfolioBalance};
+}
+function renderClosingStatus(){
+ const box=document.getElementById('closingStatus');if(!box)return;const last=latestClosing(),start=manualPeriodStart();
+ box.innerHTML=last?`<b>Último cierre: ${periodLabel(String(last.period_start).slice(0,10),String(last.closed_through).slice(0,10))}</b><div class="sub">Cartera pendiente al cierre: ${money(last.portfolio_balance)} · Disponible: ${money(last.closing_cash)}</div><div class="sub" style="margin-top:5px">Período abierto desde ${fmtDate(start)}. Iker puede cerrarlo cuando decida.</div>`:`<b>Cierre inicial pendiente</b><div class="sub">La actualización deja septiembre cerrado hasta el 04/10/2026 y el siguiente período inicia el 05/10/2026.</div>`;
+}
+function openManualClose(){
+ if(!['owner','admin'].includes(role))return;const from=manualPeriodStart(),special=!closings.length,to=special?'2026-10-04':todayISO(),s=closureSnapshot(special?'2026-09-01':from,to);
+ sheet.innerHTML=`<h3>Cierre manual</h3><div class="sub">Iker decide la fecha. Cerrar después no bloquea ni elimina movimientos.</div><label>Desde</label><input id="closeFrom" type="date" value="${special?'2026-09-01':from}" disabled><label>Cerrar hasta</label><input id="closeThrough" type="date" value="${to}" max="${todayISO()}" onchange="refreshClosePreview()"><div id="closePreview" class="closing-panel"></div><label>Nota (opcional)</label><input id="closeNotes" placeholder="Ej. Cierre de octubre"><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveManualClose()">Confirmar cierre</button></div>`;modal.classList.add('show');refreshClosePreview();
+}
+function refreshClosePreview(){const from=closeFrom.value,to=closeThrough.value,box=document.getElementById('closePreview');if(!from||!to||from>to){box.innerHTML='<b>Revise las fechas.</b>';return}const s=closureSnapshot(from,to);box.innerHTML=`<b>Panorama general al ${fmtDate(to)}</b><div class="grid" style="margin-top:9px">${reportCard('Capital inicial',s.initialCapital)}${reportCard('Cartera colocada / saldo pendiente',s.portfolioBalance)}${reportCard('Disponible',s.closingCash)}${reportCard('Capital + aportes',s.initialCapital+s.additionalCapital)}${reportCard('Posición total: disponible + cartera',s.totalPosition)}${reportCard('Cobros del período',s.collected)}</div>`}
+async function saveManualClose(){
+ const from=closeFrom.value,to=closeThrough.value;if(!from||!to||from>to||to>todayISO()){alert('Revise la fecha final del cierre.');return}const s=closureSnapshot(from,to);
+ if(!confirm(`¿Cerrar el período del ${fmtDate(from)} al ${fmtDate(to)}?\n\nCartera pendiente: ${money(s.portfolioBalance)}\nDisponible: ${money(s.closingCash)}\n\nLos movimientos se conservarán.`))return;
+ setLoading(true);const {error}=await sb.from('loans_closings').insert({period_start:from,closed_through:to,opening_cash:s.openingCash,collected:s.collected,placed:s.placed,expenses:s.spent,closing_cash:s.closingCash,initial_capital:s.initialCapital,additional_capital:s.additionalCapital,portfolio_balance:s.portfolioBalance,total_position:s.totalPosition,closed_by:session.user.id,notes:closeNotes.value.trim()||null});setLoading(false);
+ if(error){alert('No se pudo guardar el cierre. Aplique primero la migración V22 o revise que la fecha no esté cerrada: '+error.message);return}await auditEvent('period_closed','closing',null,null,{period_start:from,closed_through:to,portfolio_balance:s.portfolioBalance,closing_cash:s.closingCash});closeModal();await loadAll();setReportPeriod('closing');alert('Período cerrado. El siguiente inicia el '+fmtDate(addCalendarDaysISO(to,1))+'.');
 }
 function toggleCustomReport(){
  const box=document.getElementById('customReportDates');
@@ -612,7 +659,7 @@ function reportData(){
  const collected=rPayments.reduce((s,p)=>s+Number(p.amount||0),0);
  const spent=rExpenses.reduce((s,e)=>s+Number(e.amount||0),0);
  const capital=rCapital.reduce((s,x)=>s+Number(x.amount||0),0);
- const portfolio=loans.filter(l=>['active','refinanced'].includes(l.status)).reduce((s,l)=>s+balanceForLoan(l.id),0);
+ const portfolio=portfolioBalanceAt(to);
  const openingAvailable=cashMovements.filter(m=>movementDate(m)<from).reduce((s,m)=>s+Number(m.amount||0),0);
  const periodCash=cashMovements.filter(m=>inRange(movementDate(m),from,to)).reduce((s,m)=>s+Number(m.amount||0),0);
  const available=openingAvailable+periodCash;
@@ -620,7 +667,8 @@ function reportData(){
  const activeNow=loans.filter(l=>['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0).length;
  const paidInPeriod=rLoans.filter(l=>l.status==='paid').length;
  const refinancedInPeriod=rLoans.filter(l=>l.status==='refinanced').length;
- return {from,to,rLoans,rPayments,rExpenses,rCapital,placed,collected,spent,capital,portfolio,openingAvailable,available,cashResult,activeNow,paidInPeriod,refinancedInPeriod};
+ const initialCapital=INITIAL_CAPITAL,additionalCapital=capitalContributions.filter(x=>x.contribution_type!=='initial'&&String(x.contribution_date||'').slice(0,10)<=to).reduce((s,x)=>s+Number(x.amount||0),0),totalPosition=available+portfolio;
+ return {from,to,rLoans,rPayments,rExpenses,rCapital,placed,collected,spent,capital,portfolio,openingAvailable,available,cashResult,activeNow,paidInPeriod,refinancedInPeriod,initialCapital,additionalCapital,totalPosition};
 }
 function reportCard(label,value,note=''){
  return `<div class="stat"><small>${label}</small><b>${money(value)}</b>${note?`<div class="sub" style="margin-top:4px">${note}</div>`:''}</div>`;
@@ -640,6 +688,9 @@ function renderReport(){
     ${reportCard('Préstamos realizados',r.placed)}
     ${reportCard('Gastos',r.spent)}
     ${reportCard('Disponible al cierre',r.available)}
+     ${reportCard('Capital inicial',r.initialCapital)}
+     ${reportCard('Cartera colocada / saldo pendiente',r.portfolio)}
+     ${reportCard('Posición total: disponible + cartera',r.totalPosition)}
     <div class="stat"><small>Préstamos nuevos</small><b>${r.rLoans.length}</b></div>
     <div class="stat"><small>Préstamos activos actuales</small><b>${r.activeNow}</b></div>
     <div class="stat"><small>Pagados del período</small><b>${r.paidInPeriod}</b></div>
@@ -689,7 +740,8 @@ function exportReportExcel(){
   ['Cobros recibidos',r.collected],
   ['Gastos',r.spent],
   ['Movimiento operativo de caja',r.cashResult],
-  ['Capital aportado',r.capital],
+   ['Capital inicial',r.initialCapital],
+   ['Aportes del período',r.capital],
   ['Cartera pendiente actual',r.portfolio],
   ['Disponible para prestar',r.available],
   ['',''],
@@ -699,13 +751,13 @@ function exportReportExcel(){
  ];
  const ws=XLSX.utils.aoa_to_sheet(summary);
  ws['!cols']=[{wch:34},{wch:72}];
- ws['!merges']=[XLSX.utils.decode_range('A1:B1'),XLSX.utils.decode_range('A2:B2'),XLSX.utils.decode_range('A16:B16')];
+  ws['!merges']=[XLSX.utils.decode_range('A1:B1'),XLSX.utils.decode_range('A2:B2'),XLSX.utils.decode_range('A17:B17')];
  styleCell(ws.A1,{bold:true,sz:20,fill:headerFill,fontColor:white});
  styleCell(ws.A2,{bold:true,sz:13,fill:headerFill,fontColor:white});
  styleCell(ws.A7,{bold:true,fill:lightFill}); styleCell(ws.B7,{bold:true,fill:lightFill,align:'right'});
- for(let row=8;row<=14;row++){styleCell(ws[`A${row}`],{border:true});styleCell(ws[`B${row}`],{bold:true,align:'right',border:true});if(ws[`B${row}`])ws[`B${row}`].z=currencyFmt}
- styleCell(ws.A16,{bold:true,fill:lightFill});
- styleCell(ws.A17,{bold:true});styleCell(ws.A18,{bold:true});
+  for(let row=8;row<=15;row++){styleCell(ws[`A${row}`],{border:true});styleCell(ws[`B${row}`],{bold:true,align:'right',border:true});if(ws[`B${row}`])ws[`B${row}`].z=currencyFmt}
+  styleCell(ws.A17,{bold:true,fill:lightFill});
+  styleCell(ws.A18,{bold:true});styleCell(ws.A19,{bold:true});
  ws['!rows']=[{hpt:28},{hpt:22},{hpt:8},{hpt:20},{hpt:20},{hpt:8},{hpt:22}];
  XLSX.utils.book_append_sheet(wb,ws,'Resumen');
 
@@ -766,9 +818,11 @@ function printReport(){
   <div class="box"><span>Cobros recibidos</span><b>${money(r.collected)}</b></div>
   <div class="box"><span>Gastos</span><b>${money(r.spent)}</b></div>
   <div class="box"><span>Movimiento operativo de caja</span><b>${money(r.cashResult)}</b></div>
-  <div class="box"><span>Capital aportado</span><b>${money(r.capital)}</b></div>
+   <div class="box"><span>Capital inicial</span><b>${money(r.initialCapital)}</b></div>
+   <div class="box"><span>Aportes del período</span><b>${money(r.capital)}</b></div>
   <div class="box"><span>Cartera pendiente actual</span><b>${money(r.portfolio)}</b></div>
   <div class="box"><span>Disponible para prestar</span><b>${money(r.available)}</b></div>
+   <div class="box"><span>Posición total: disponible + cartera</span><b>${money(r.totalPosition)}</b></div>
  </div>
  <div class="note"><b>Importante:</b> los aportes de capital son fondos puestos por el propietario y no representan ganancia. El movimiento operativo de caja refleja cobros menos gastos y préstamos entregados; un valor negativo puede deberse a dinero colocado en nuevos préstamos y no significa por sí solo una pérdida.</div>
  <h2>Préstamos del período</h2>${table(['Fecha','Cliente','Monto prestado','Saldo actual'],loanRows)}
@@ -832,6 +886,7 @@ function renderAdmin(){if(!['owner','admin','technical_support','collector'].inc
  renderAdminDailySummary();
  renderRecentCreditsByDate();
  renderRecentPaymentsByDate();
+  renderClosingStatus();
  renderCollectors();
 }
 function renderCollectors(){if(!collectorList)return;collectorList.innerHTML=collectors.map(c=>{let n=loans.filter(l=>l.collector_id===c.user_id&&balanceForLoan(l.id)>0).length;return `<div class="collector-row"><div class="avatar">${(c.full_name||'?')[0]}</div><div class="info"><b>${c.full_name}</b><small>${c.active?'Activo':'Inactivo'} · ${n} crédito(s)</small></div><div class="collector-actions">${c.active?`<button class="secondary" onclick="openReassignCollector('${c.user_id}')">Cartera</button><button class="danger" onclick="deactivateCollector('${c.user_id}')">Desactivar</button>`:'<span class="pill">INACTIVO</span>'}</div></div>`}).join('')||'<div class="empty">Todavía no hay cobradores.</div>'}
@@ -842,7 +897,7 @@ function openLoanHistory(id){
  const ps=payments.filter(p=>p.loan_id===id).sort((a,b)=>String(b.payment_date).localeCompare(String(a.payment_date)));
  sheet.innerHTML=`<h3>${c.full_name}</h3><div class="sub">Historial del crédito</div>
  ${l.source_type==='physical_card'?`<span class="pill" style="margin-top:8px">MIGRADO DE TARJETA</span>`:''}
- ${list.map(cy=>{const paid=cyclePaid(cy.id),rem=Math.max(0,Number(cy.amount_due)-paid);return `<div class="card" style="margin-top:10px"><b>Ciclo ${cy.cycle_number}</b><div class="sub">${fmtDate(cy.start_date)} → ${fmtDate(cy.due_date)}</div><div style="margin-top:6px">Base: <b>${money(cy.opening_principal)}</b> · Interés: <b>${Number(cy.interest_rate)}%</b></div><div>Total ciclo: <b>${money(cy.amount_due)}</b> · Pagado: <b>${money(paid)}</b> · Saldo: <b>${money(rem)}</b></div><div class="sub">Estado: ${cy.status==='active'?'Activo':cy.status==='refinanced'?'Refinanciado':'Pagado'}</div></div>`}).join('')}
+  ${list.map(cy=>{const paid=cyclePaid(cy.id),rem=Math.max(0,Number(cy.amount_due)-paid);return `<div class="card" style="margin-top:10px"><b>Ciclo ${cy.cycle_number}</b><div class="sub">${termLabel(l)} · ${fmtDate(cy.start_date)} → ${fmtDate(cy.due_date)}</div><div style="margin-top:6px">Base: <b>${money(cy.opening_principal)}</b> · Interés: <b>${Number(cy.interest_rate)}%</b></div><div>Total ciclo: <b>${money(cy.amount_due)}</b> · Pagado: <b>${money(paid)}</b> · Saldo: <b>${money(rem)}</b></div><div class="sub">Estado: ${cy.status==='active'?'Activo':cy.status==='refinanced'?'Refinanciado':'Pagado'}</div></div>`}).join('')}
  <h4 style="margin-bottom:6px">Abonos</h4>
  ${ps.length?ps.map(p=>`<div class="card" style="margin-top:8px"><div class="receipt-line"><span>${fmtDate(p.payment_date)} · ${p.payment_method==='sinpe'?'SINPE':'Efectivo'}</span><b>${money(p.amount)}</b></div><button class="secondary big" style="margin-top:6px" onclick="openPaymentReceipt('${p.id}')">Ver / compartir recibo</button></div>`).join(''):'<div class="sub">Sin abonos registrados.</div>'}
  <div class="actions"><button class="secondary" onclick="closeModal()">Cerrar</button></div>`;
@@ -850,9 +905,9 @@ function openLoanHistory(id){
 }
 async function confirmRefinance(id){
  const l=loans.find(x=>x.id===id),c=clientFor(l.client_id),cy=activeCycleForLoan(id);
- if(!cy||!isCycleDue(cy)){alert('Este crédito todavía no está listo para refinanciar.');return}
+  if(!cy||!isCycleDue(cy)){alert('Este crédito todavía no está listo para refinanciar.');return}
  const rem=cycleRemaining(cy),next=Math.round(rem*1.20*100)/100;
- if(!confirm(`¿Refinanciar el saldo de ${money(rem)} de ${c.full_name}?\n\nNuevo ciclo: ${money(next)}\nInterés: 20%\nPlazo: 24 días`))return;
+  if(!confirm(`¿Refinanciar el saldo de ${money(rem)} de ${c.full_name}?\n\nNuevo ciclo: ${money(next)}\nInterés: 20%\n${termLabel(l)}`))return;
  setLoading(true);
  const {error}=await sb.rpc('loans_refinance_cycle',{p_loan_id:id});
  setLoading(false);
@@ -864,11 +919,11 @@ async function confirmRefinance(id){
 function openPay(id){
  let l=loans.find(x=>x.id===id),c=clientFor(l.client_id),bal=balanceForLoan(id);
  if(!l||bal<=0){alert('Este crédito no tiene saldo pendiente.');return}
- const migrated=l.source_type==='physical_card';
+  const migrated=l.source_type==='physical_card',cy=activeCycleForLoan(id),overdue=cy&&isCycleOverdue(cy);
  const suggested=pendingTodayForLoan(l);
- sheet.innerHTML=`<h3>Registrar cobro</h3><div class="sub"><b>${clientDisplayName(c)}</b> · saldo actual ${money(bal)}</div>${migrated?`<div class="role-note">Tarjeta migrada · cuota pactada de hoy: <b>${money(scheduledTodayForLoan(l))}</b>. Puede registrar el monto realmente recibido.</div>`:''}<label>Monto recibido</label><input id="payAmount" type="number" min="1" max="${bal}" value="${suggested||''}" placeholder="Monto recibido"><label>Forma de pago</label><select id="payMethod"><option value="cash">Efectivo</option><option value="sinpe">SINPE</option></select><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="confirmQuickPay('${id}')">Continuar</button></div>`;modal.classList.add('show')
+  sheet.innerHTML=`<h3>Registrar cobro</h3><div class="sub"><b>${clientDisplayName(c)}</b> · saldo actual ${money(bal)}</div>${overdue?`<div class="overdue-alert">⚠ CRÉDITO VENCIDO<br><span style="font-size:12px;font-weight:700">Venció el ${fmtDate(cy.due_date)} · ${termLabel(l)}</span></div>`:''}${migrated?`<div class="role-note">Tarjeta migrada · cuota pactada de hoy: <b>${money(scheduledTodayForLoan(l))}</b>. Puede registrar el monto realmente recibido.</div>`:''}<label>Monto recibido</label><input id="payAmount" type="number" min="1" max="${bal}" value="${suggested||''}" placeholder="Monto recibido"><label>Forma de pago</label><select id="payMethod"><option value="cash">Efectivo</option><option value="sinpe">SINPE</option></select><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="confirmQuickPay('${id}')">Continuar</button></div>`;modal.classList.add('show')
 }
-function confirmQuickPay(id){const l=loans.find(x=>x.id===id),c=clientFor(l.client_id),bal=balanceForLoan(id),a=Number(payAmount.value),method=payMethod.value;if(!a||a<=0||a>bal){alert('Revise el monto recibido.');return}sheet.innerHTML=`<h3>Confirmar pago</h3><div class="card"><div class="receipt-line"><span>Cliente</span><b>${clientDisplayName(c)}</b></div><div class="receipt-line"><span>Saldo actual</span><b>${money(bal)}</b></div><div class="receipt-line"><span>Recibe</span><b>${money(a)}</b></div><div class="receipt-line"><span>Nuevo saldo</span><b>${money(bal-a)}</b></div><div class="receipt-line"><span>Forma</span><b>${method==='sinpe'?'SINPE':'Efectivo'}</b></div></div><div class="actions"><button class="secondary" onclick="openPay('${id}')">Atrás</button><button class="primary" onclick="payConfirmed('${id}',${a},'${method}')">Registrar pago</button></div>`}
+function confirmQuickPay(id){const l=loans.find(x=>x.id===id),c=clientFor(l.client_id),cy=activeCycleForLoan(id),overdue=cy&&isCycleOverdue(cy),bal=balanceForLoan(id),a=Number(payAmount.value),method=payMethod.value;if(!a||a<=0||a>bal){alert('Revise el monto recibido.');return}sheet.innerHTML=`<h3>Confirmar pago</h3>${overdue?'<div class="overdue-alert">⚠ CRÉDITO VENCIDO</div>':''}<div class="card"><div class="receipt-line"><span>Cliente</span><b>${clientDisplayName(c)}</b></div><div class="receipt-line"><span>Saldo actual</span><b>${money(bal)}</b></div><div class="receipt-line"><span>Recibe</span><b>${money(a)}</b></div><div class="receipt-line"><span>Nuevo saldo</span><b>${money(bal-a)}</b></div><div class="receipt-line"><span>Forma</span><b>${method==='sinpe'?'SINPE':'Efectivo'}</b></div></div><div class="actions"><button class="secondary" onclick="openPay('${id}')">Atrás</button><button class="primary" onclick="payConfirmed('${id}',${a},'${method}')">Registrar pago</button></div>`}
 async function payConfirmed(id,a,method){window._quickPay={amount:a,method};await pay(id)}
 
 
@@ -1025,9 +1080,9 @@ async function savePhysicalCardImport(){
  closeModal();await loadAll();go('loans',document.querySelectorAll('.nav button')[1]);alert('Tarjeta migrada correctamente. Revise el saldo antes de continuar con cobros.');
 }
 
-function openNewLoan(){const active=collectors.filter(c=>c.active);sheet.innerHTML=`<h3>Nuevo préstamo</h3><label>Cliente</label><select id="existingClient"><option value="">＋ Cliente nuevo</option>${clients.map(c=>`<option value="${c.id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select><label>Nombre del cliente nuevo</label><input id="newName" placeholder="Nombre completo"><label>Identificación (opcional)</label><input id="newIdentification" placeholder="Cédula / identificación"><label>Teléfono (opcional)</label><input id="newPhone" placeholder="8888-8888"><label>Dirección / referencia (opcional)</label><textarea id="newAddress" rows="2" placeholder="Dirección o punto de referencia"></textarea><label>Notas del cliente (opcional)</label><textarea id="newClientNotes" rows="2" placeholder="Información útil"></textarea><label>Monto entregado</label><input id="newPrincipal" type="number" placeholder="100000" oninput="calcNew()"><div class="row"><div><label>Interés</label><input value="20%" disabled></div><div><label>Total a cobrar</label><input id="newTotal" disabled></div></div><div class="row"><div><label>Plazo</label><input value="24 días" disabled></div><div><label>Frecuencia</label><select id="newFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select></div></div><label>Monto esperado por cobro</label><input id="newPayment" type="number" placeholder="5000"><label>Cobrador asignado</label><input value="Alex" disabled><input id="newCollector" type="hidden" value="${ALEX_COLLECTOR_ID}"><div class="role-note">Todos los créditos nuevos se asignan automáticamente a Alex.</div><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveLoan()">Crear préstamo</button></div>`;modal.classList.add('show')}
+function openNewLoan(){sheet.innerHTML=`<h3>Nuevo préstamo</h3><label>Cliente</label><select id="existingClient"><option value="">＋ Cliente nuevo</option>${clients.map(c=>`<option value="${c.id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select><label>Nombre del cliente nuevo</label><input id="newName" placeholder="Nombre completo"><label>Identificación (opcional)</label><input id="newIdentification" placeholder="Cédula / identificación"><label>Teléfono (opcional)</label><input id="newPhone" placeholder="8888-8888"><label>Dirección / referencia (opcional)</label><textarea id="newAddress" rows="2" placeholder="Dirección o punto de referencia"></textarea><label>Notas del cliente (opcional)</label><textarea id="newClientNotes" rows="2" placeholder="Información útil"></textarea><label>Monto entregado</label><input id="newPrincipal" type="number" placeholder="100000" oninput="calcNew()"><div class="row"><div><label>Interés</label><input value="20%" disabled></div><div><label>Total a cobrar</label><input id="newTotal" disabled></div></div><label>Modalidad / plazo del crédito</label><select id="newTerm"><option value="weekly">Semanal · 7 días efectivos</option><option value="fortnightly">Quincenal · 15 días efectivos</option><option value="days_24" selected>24 días efectivos</option><option value="days_30">30 días efectivos</option></select><div class="role-note">Los domingos no consumen días del plazo ni adelantan el vencimiento.</div><label>Frecuencia de cobro</label><select id="newFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select><label>Monto esperado por cobro</label><input id="newPayment" type="number" placeholder="5000"><label>Cobrador asignado</label><input value="Alex" disabled><input id="newCollector" type="hidden" value="${ALEX_COLLECTOR_ID}"><div class="role-note">Todos los créditos nuevos se asignan automáticamente a Alex. Los créditos históricos conservan su vencimiento original.</div><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveLoan()">Crear préstamo</button></div>`;modal.classList.add('show')}
 function calcNew(){newTotal.value=money(Number(newPrincipal.value||0)*1.2)}
-async function saveLoan(){let p=Number(newPrincipal.value),pay=Number(newPayment.value),clientId=existingClient.value;if(!p||!pay){alert('Complete monto y cobro esperado.');return}const existing=clients.find(c=>c.id===clientId);const mm=morosoMatch(existing?.full_name||newName.value,existing?.phone||newPhone.value);if(mm){alert('⚠️ CLIENTE MOROSO\n\n'+mm.full_name+' mantiene una deuda morosa de '+money(mm.opening_balance)+'.\n\nNo se creará un crédito normal. Iker debe revisar y autorizar un acuerdo especial.');return}setLoading(true);if(!clientId){let name=newName.value.trim();if(!name){setLoading(false);alert('Indique el cliente.');return}const {data:c,error}=await sb.from('loans_clients').insert({full_name:name,identification:newIdentification.value.trim()||null,phone:newPhone.value.trim()||null,address:newAddress.value.trim()||null,notes:newClientNotes.value.trim()||null}).select().single();if(error){setLoading(false);alert(error.message);return}clientId=c.id}const collectorId=ALEX_COLLECTOR_ID;const collector=collectors.find(c=>c.user_id===collectorId)||{user_id:ALEX_COLLECTOR_ID,full_name:ALEX_COLLECTOR_NAME};const {data:l,error}=await sb.from('loans_loans').insert({client_id:clientId,principal:p,interest_rate:20,term_days:24,start_date:todayISO(),collection_frequency:newFreq.value,expected_payment:pay,collector_id:collectorId,collector_name_snapshot:collector?.full_name||null,created_by:session.user.id}).select().single();if(error){setLoading(false);alert(error.message);return}await auditEvent('loan_created','loan',l.id,null,{principal:p,interest_rate:20,client_id:clientId});if(collectorId)await sb.from('loans_collector_history').insert({loan_id:l.id,collector_id:collectorId,collector_name:collector.full_name,assigned_by:session.user.id});await sb.from('loans_cash_movements').insert({movement_type:'loan_disbursement',amount:-p,loan_id:l.id,created_by:session.user.id});closeModal();await loadAll();setLoading(false);go('loans',document.querySelectorAll('.nav button')[1])}
+async function saveLoan(){let p=Number(newPrincipal.value),pay=Number(newPayment.value),clientId=existingClient.value;const terms={weekly:7,fortnightly:15,days_24:24,days_30:30},termCode=newTerm.value,termDays=terms[termCode],startDate=todayISO(),dueDate=addEffectiveDays(startDate,termDays);if(!p||!pay||!termDays){alert('Complete monto, plazo y cobro esperado.');return}const existing=clients.find(c=>c.id===clientId);const mm=morosoMatch(existing?.full_name||newName.value,existing?.phone||newPhone.value);if(mm){alert('⚠️ CLIENTE MOROSO\n\n'+mm.full_name+' mantiene una deuda morosa de '+money(mm.opening_balance)+'.\n\nNo se creará un crédito normal. Iker debe revisar y autorizar un acuerdo especial.');return}setLoading(true);if(!clientId){let name=newName.value.trim();if(!name){setLoading(false);alert('Indique el cliente.');return}const {data:c,error}=await sb.from('loans_clients').insert({full_name:name,identification:newIdentification.value.trim()||null,phone:newPhone.value.trim()||null,address:newAddress.value.trim()||null,notes:newClientNotes.value.trim()||null}).select().single();if(error){setLoading(false);alert(error.message);return}clientId=c.id}const collectorId=ALEX_COLLECTOR_ID;const collector=collectors.find(c=>c.user_id===collectorId)||{user_id:ALEX_COLLECTOR_ID,full_name:ALEX_COLLECTOR_NAME};const {data:l,error}=await sb.from('loans_loans').insert({client_id:clientId,principal:p,interest_rate:20,term_days:termDays,credit_term_code:termCode,effective_term_days:termDays,start_date:startDate,due_date:dueDate,collection_frequency:newFreq.value,expected_payment:pay,collector_id:collectorId,collector_name_snapshot:collector?.full_name||null,created_by:session.user.id}).select().single();if(error){setLoading(false);alert('No se pudo crear el crédito. Confirme que la migración V22 esté aplicada: '+error.message);return}await auditEvent('loan_created','loan',l.id,null,{principal:p,interest_rate:20,client_id:clientId,credit_term_code:termCode,effective_term_days:termDays,due_date:dueDate});if(collectorId)await sb.from('loans_collector_history').insert({loan_id:l.id,collector_id:collectorId,collector_name:collector.full_name,assigned_by:session.user.id});await sb.from('loans_cash_movements').insert({movement_type:'loan_disbursement',amount:-p,loan_id:l.id,created_by:session.user.id});closeModal();await loadAll();setLoading(false);go('loans',document.querySelectorAll('.nav button')[1])}
 function openCapital(){const hasInitial=capitalContributions.some(x=>x.contribution_type==='initial');sheet.innerHTML=`<h3>Registrar capital</h3><p class="sub">Este dinero aumenta el disponible para prestar y queda registrado en el historial.</p><label>Tipo</label><select id="capitalType">${hasInitial?'':'<option value="initial">Capital inicial</option>'}<option value="additional">Aporte adicional</option></select><label>Monto</label><input id="capitalAmount" type="number" min="1" placeholder="Ej. 500000"><label>Fecha</label><input id="capitalDate" type="date" value="${todayISO()}"><label>Nota (opcional)</label><input id="capitalNotes" placeholder="Ej. Capital de arranque"><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveCapital()">Guardar capital</button></div>`;modal.classList.add('show')}
 async function saveCapital(){const amount=Number(capitalAmount.value||0),type=capitalType.value,date=capitalDate.value||todayISO(),notes=capitalNotes.value.trim();if(amount<=0){alert('Indique un monto mayor que cero.');return}setLoading(true);const {error}=await sb.rpc('loans_register_capital',{p_amount:amount,p_type:type,p_date:date,p_notes:notes||null});setLoading(false);if(error){alert('No se pudo registrar el capital: '+error.message);return}closeModal();await loadAll();alert(type==='initial'?'Capital inicial registrado.':'Aporte de capital registrado.')}
 function openNewCollector(){sheet.innerHTML=`<h3>Agregar cobrador</h3><p class="sub">Iker crea el acceso directamente. No se envía correo de confirmación.</p><label>Nombre completo</label><input id="collectorName" autocomplete="off"><label>Correo / usuario</label><input id="collectorEmail" type="email" autocomplete="off"><label>Contraseña temporal</label><input id="collectorPassword" type="password" minlength="8" autocomplete="new-password"><div class="role-note">Mínimo 8 caracteres. Compártala con el cobrador por un medio privado.</div><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="createCollector()">Crear acceso</button></div>`;modal.classList.add('show')}
@@ -1045,8 +1100,8 @@ function openReassignCollector(fromId){
 }
 async function assignLoanToCollector(loanId,collectorId){const c=collectors.find(x=>x.user_id===collectorId);if(!c||!c.active){alert('El cobrador no está activo.');return}if(!confirm('¿Asignar este crédito a '+c.full_name+'?'))return;setLoading(true);const {error}=await sb.rpc('loans_assign_collector',{p_loan_id:loanId,p_collector_id:collectorId});setLoading(false);if(error){alert(error.message);return}await loadAll();openReassignCollector(collectorId);alert('Crédito asignado correctamente.')}
 async function reassignLoan(loanId){const el=document.getElementById('re_'+loanId),to=el?.value;if(!to){alert('Seleccione el nuevo cobrador.');return}setLoading(true);const {error}=await sb.rpc('loans_assign_collector',{p_loan_id:loanId,p_collector_id:to});setLoading(false);if(error){alert(error.message);return}await loadAll();openReassignCollector(to);alert('Cartera reasignada correctamente.')}
-function openDetail(id){let l=loans.find(x=>x.id===id),c=clientFor(l.client_id),cy=cycleFor(id),ps=payments.filter(p=>p.loan_id===id);sheet.innerHTML=`<h3>${c.full_name}</h3>${l.source_type==='physical_card'?'<span class="pill">MIGRADO DE TARJETA</span>':'<span class="pill">TARJETA DIGITAL</span>'}<div class="grid"><div><small class="sub">Prestado</small><div class="balance">${money(l.principal)}</div></div><div><small class="sub">Total ciclo</small><div class="balance">${money(cy?.amount_due)}</div></div></div><div class="card"><div class="receipt-line"><span>Ciclo</span><b>${cy?.cycle_number||1}</b></div><div class="receipt-line"><span>Inicio</span><b>${fmtDate(cy?.start_date)}</b></div><div class="receipt-line"><span>Vence</span><b>${fmtDate(cy?.due_date)}</b></div><div class="receipt-line"><span>Saldo</span><b>${money(balanceForLoan(id))}</b></div>${l.collector_name_snapshot?`<div class="receipt-line"><span>Cobrador</span><b>${l.collector_name_snapshot}</b></div>`:''}</div><h4>Abonos</h4>${ps.length?ps.map(p=>`<div class="receipt-line"><span>${fmtDate(p.payment_date)}</span><b>${money(p.amount)}</b></div>`).join(''):'<div class="sub">Sin abonos.</div>'}<button class="secondary big" style="margin-top:12px" onclick="closeModal()">Cerrar</button>`;modal.classList.add('show')}
-function simulateRefi(id){let l=loans.find(x=>x.id===id),cy=cycleFor(id),bal=balanceForLoan(id),nt=bal*1.2,can=todayISO()>=cy.due_date;sheet.innerHTML=`<h3>Refinanciamiento</h3><p class="sub">El nuevo ciclo se calcula únicamente sobre el saldo pendiente.</p><div class="hero"><small>Saldo pendiente</small><div class="money">${money(bal)}</div></div><div class="card" style="margin-top:10px"><div class="receipt-line"><span>Nuevo capital</span><b>${money(bal)}</b></div><div class="receipt-line"><span>20%</span><b>${money(bal*.2)}</b></div><div class="receipt-line"><span>Nuevo total</span><b>${money(nt)}</b></div><div class="receipt-line"><span>Nuevo plazo</span><b>24 días</b></div></div>${can?`<button class="primary big" style="margin-top:10px" onclick="confirmRefi('${id}')">Confirmar nuevo ciclo</button>`:`<div class="sub" style="margin-top:12px">Disponible a partir del vencimiento: ${fmtDate(cy.due_date)}.</div>`}<button class="secondary big" style="margin-top:8px" onclick="closeModal()">Cerrar</button>`;modal.classList.add('show')}
+function openDetail(id){let l=loans.find(x=>x.id===id),c=clientFor(l.client_id),cy=cycleFor(id),ps=payments.filter(p=>p.loan_id===id);sheet.innerHTML=`<h3>${c.full_name}</h3>${l.source_type==='physical_card'?'<span class="pill">MIGRADO DE TARJETA</span>':'<span class="pill">TARJETA DIGITAL</span>'}<div class="grid"><div><small class="sub">Prestado</small><div class="balance">${money(l.principal)}</div></div><div><small class="sub">Total ciclo</small><div class="balance">${money(cy?.amount_due)}</div></div></div><div class="card"><div class="receipt-line"><span>Modalidad</span><b>${termLabel(l)}</b></div><div class="receipt-line"><span>Ciclo</span><b>${cy?.cycle_number||1}</b></div><div class="receipt-line"><span>Inicio</span><b>${fmtDate(cy?.start_date)}</b></div><div class="receipt-line"><span>Vence</span><b>${fmtDate(cy?.due_date)}</b></div><div class="receipt-line"><span>Saldo</span><b>${money(balanceForLoan(id))}</b></div>${l.collector_name_snapshot?`<div class="receipt-line"><span>Cobrador</span><b>${l.collector_name_snapshot}</b></div>`:''}</div><h4>Abonos</h4>${ps.length?ps.map(p=>`<div class="receipt-line"><span>${fmtDate(p.payment_date)}</span><b>${money(p.amount)}</b></div>`).join(''):'<div class="sub">Sin abonos.</div>'}<button class="secondary big" style="margin-top:12px" onclick="closeModal()">Cerrar</button>`;modal.classList.add('show')}
+function simulateRefi(id){let l=loans.find(x=>x.id===id),cy=cycleFor(id),bal=balanceForLoan(id),nt=bal*1.2,can=isCycleDue(cy);sheet.innerHTML=`<h3>Refinanciamiento</h3><p class="sub">El nuevo ciclo se calcula únicamente sobre el saldo pendiente.</p><div class="hero"><small>Saldo pendiente</small><div class="money">${money(bal)}</div></div><div class="card" style="margin-top:10px"><div class="receipt-line"><span>Nuevo capital</span><b>${money(bal)}</b></div><div class="receipt-line"><span>20%</span><b>${money(bal*.2)}</b></div><div class="receipt-line"><span>Nuevo total</span><b>${money(nt)}</b></div><div class="receipt-line"><span>Nuevo plazo</span><b>${termLabel(l)}</b></div></div>${can?`<button class="primary big" style="margin-top:10px" onclick="confirmRefi('${id}')">Confirmar nuevo ciclo</button>`:`<div class="sub" style="margin-top:12px">Disponible a partir del vencimiento: ${fmtDate(cy.due_date)}.</div>`}<button class="secondary big" style="margin-top:8px" onclick="closeModal()">Cerrar</button>`;modal.classList.add('show')}
 async function confirmRefi(id){if(!confirm('¿Crear el nuevo ciclo con 20% sobre el saldo pendiente?'))return;setLoading(true);const {error}=await sb.rpc('loans_refinance_cycle',{p_loan_id:id});setLoading(false);if(error){alert(error.message);return}closeModal();await loadAll()}
 function go(id,btn){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');window.scrollTo(0,0)}
 function closeModal(){modal.classList.remove('show')}
