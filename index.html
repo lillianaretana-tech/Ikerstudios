@@ -586,7 +586,8 @@ function prettyDate(s){if(!s)return '';const [y,m,d]=s.split('-');return `${d}/$
 function periodLabel(from,to){return `${prettyDate(from)} al ${prettyDate(to)}`}
 function addCalendarDaysISO(iso,days){const [y,m,d]=iso.split('-').map(Number),x=new Date(Date.UTC(y,m-1,d+days));return x.toISOString().slice(0,10)}
 function latestClosing(){return [...closings].sort((a,b)=>String(b.closed_through).localeCompare(String(a.closed_through)))[0]||null}
-function manualPeriodStart(){const last=latestClosing();return last?addCalendarDaysISO(String(last.closed_through).slice(0,10),1):FIRST_MANUAL_PERIOD_START}
+function hasSeptemberClosing(){return closings.some(c=>String(c.period_start).slice(0,10)==='2026-09-26'&&String(c.closed_through).slice(0,10)==='2026-10-04')}
+function manualPeriodStart(){if(!hasSeptemberClosing())return '2026-09-26';const last=latestClosing();return last?addCalendarDaysISO(String(last.closed_through).slice(0,10),1):FIRST_MANUAL_PERIOD_START}
 function setReportPeriod(which){
  const now=new Date(),fromEl=document.getElementById('reportFrom'),toEl=document.getElementById('reportTo');
  let a,b;
@@ -597,6 +598,7 @@ function setReportPeriod(which){
  }else if(which==='month'){
    a=new Date(now.getFullYear(),now.getMonth(),1);b=now;
  }else if(which==='closing'){
+   if(!hasSeptemberClosing()){fromEl.value='2026-09-26';toEl.value='2026-10-04';document.getElementById('customReportDates').style.display='none';renderReport();return}
    const last=latestClosing();
    if(last){fromEl.value=String(last.period_start).slice(0,10);toEl.value=String(last.closed_through).slice(0,10);document.getElementById('customReportDates').style.display='none';renderReport();return}
    fromEl.value='2026-09-26';toEl.value='2026-10-04';document.getElementById('customReportDates').style.display='none';renderReport();return
@@ -632,10 +634,11 @@ function closureSnapshot(from,to){
 }
 function renderClosingStatus(){
  const box=document.getElementById('closingStatus');if(!box)return;const last=latestClosing(),start=manualPeriodStart();
- box.innerHTML=last?`<b>Último cierre: ${periodLabel(String(last.period_start).slice(0,10),String(last.closed_through).slice(0,10))}</b><div class="sub">Capital inicial migrado: ${money(last.initial_capital)} · Cartera pendiente: ${money(last.portfolio_balance)} · Disponible: ${money(last.closing_cash)}</div><div class="sub" style="margin-top:5px">Período abierto desde ${fmtDate(start)}. Iker puede cerrarlo cuando decida.</div>`:`<b>Cierre inicial pendiente</b><div class="sub">La actualización toma como base las tarjetas migradas el 26/09/2026, cierra hasta el 04/10/2026 y abre el siguiente período el 05/10/2026.</div>`;
+ if(!hasSeptemberClosing()){box.innerHTML=`<b>Cierre de septiembre pendiente</b><div class="sub">Iker debe confirmar personalmente el período del 26/09/2026 al 04/10/2026. Capital inicial calculado desde las tarjetas migradas.</div>`;return}
+ box.innerHTML=last?`<b>Último cierre: ${periodLabel(String(last.period_start).slice(0,10),String(last.closed_through).slice(0,10))}</b><div class="sub">Capital inicial migrado: ${money(last.initial_capital)} · Cartera pendiente: ${money(last.portfolio_balance)} · Disponible: ${money(last.closing_cash)}</div><div class="sub" style="margin-top:5px">Período abierto desde ${fmtDate(start)}. Iker puede cerrarlo cuando decida.</div>`:`<b>Sin cierres registrados</b>`;
 }
 function openManualClose(){
- if(!['owner','admin'].includes(role))return;const from=manualPeriodStart(),special=!closings.length,to=special?'2026-10-04':todayISO(),s=closureSnapshot(special?'2026-09-26':from,to);
+ if(!['owner','admin'].includes(role))return;const from=manualPeriodStart(),special=!hasSeptemberClosing(),to=special?'2026-10-04':todayISO(),s=closureSnapshot(special?'2026-09-26':from,to);
  sheet.innerHTML=`<h3>Cierre manual</h3><div class="sub">Iker decide la fecha. Cerrar después no bloquea ni elimina movimientos.</div><label>Desde</label><input id="closeFrom" type="date" value="${special?'2026-09-26':from}" disabled><label>Cerrar hasta</label><input id="closeThrough" type="date" value="${to}" max="${todayISO()}" onchange="refreshClosePreview()"><div id="closePreview" class="closing-panel"></div><label>Nota (opcional)</label><input id="closeNotes" placeholder="Ej. Cierre de octubre"><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveManualClose()">Confirmar cierre</button></div>`;modal.classList.add('show');refreshClosePreview();
 }
 function refreshClosePreview(){const from=closeFrom.value,to=closeThrough.value,box=document.getElementById('closePreview');if(!from||!to||from>to){box.innerHTML='<b>Revise las fechas.</b>';return}const s=closureSnapshot(from,to);box.innerHTML=`<b>Panorama general al ${fmtDate(to)}</b><div class="grid" style="margin-top:9px">${reportCard('Capital inicial',s.initialCapital)}${reportCard('Cartera colocada / saldo pendiente',s.portfolioBalance)}${reportCard('Disponible',s.closingCash)}${reportCard('Capital + aportes',s.initialCapital+s.additionalCapital)}${reportCard('Posición total: disponible + cartera',s.totalPosition)}${reportCard('Cobros del período',s.collected)}</div>`}
