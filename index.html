@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Cartera 24 V22</title>
+<title>Cartera 24 V23</title>
  
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#3a2923">
@@ -225,7 +225,7 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
    <p class="sub">Modalidades de 7, 15, 24 o 30 días efectivos · 20% fijo. Los domingos no cuentan para duración ni vencimiento.</p>
  </div>
 </section>
-<footer>Desarrollado por LillyTech · 3RS Integrated Solutions · V22</footer>
+<footer>Desarrollado por LillyTech · 3RS Integrated Solutions · V23</footer>
 </main>
 
 <nav class="nav">
@@ -339,12 +339,24 @@ async function loadAll(){
   sb.from('loans_clients').select('*').eq('active',true).order('full_name'),
   sb.from('loans_loans').select('*').order('created_at',{ascending:false}),
   sb.from('loans_cycles').select('*').order('cycle_number'),
-  sb.from('loans_payments').select('*').order('payment_date',{ascending:false}),
+  sb.from('loans_payments').select('*').order('payment_date',{ascending:false}).limit(1000),
    sb.from('loans_morosos').select('*').order('full_name')
  ];
  if(operationalRead){base.push(sb.from('loans_expenses').select('*').order('expense_date',{ascending:false}),sb.from('loans_cash_movements').select('*').order('occurred_at',{ascending:false}))}
  if(owner){base.push(sb.from('loans_capital_contributions').select('*').order('contribution_date',{ascending:false}).order('created_at',{ascending:false}))}
  const res=await Promise.all(base); const err=res.find(x=>x.error)?.error;
+ // V23: Supabase limita normalmente a 1000 filas por consulta. Recuperar TODAS
+ // las páginas para que recibos históricos y saldos no omitan pagos anteriores.
+ if(!err){
+   const allPayments=[...(res[3].data||[])];
+   for(let offset=1000;allPayments.length===offset;offset+=1000){
+     const page=await sb.from('loans_payments').select('*').order('payment_date',{ascending:false}).range(offset,offset+999);
+     if(page.error){alert('No se pudieron cargar todos los pagos: '+page.error.message);return}
+     allPayments.push(...(page.data||[]));
+     if((page.data||[]).length<1000)break;
+   }
+   res[3].data=allPayments;
+ }
  if(err){alert('No se pudieron cargar los datos: '+err.message);return}
  clients=res[0].data||[];loans=res[1].data||[];cycles=res[2].data||[];payments=res[3].data||[];morosos=res[4].data||[];
  loanExpenses=operationalRead?(res[5].data||[]):[]; cashMovements=operationalRead?(res[6].data||[]):[]; capitalContributions=owner?(res[7].data||[]):[];
@@ -935,7 +947,7 @@ function receiptData(paymentId){
  const p=payments.find(x=>x.id===paymentId);if(!p)return null;
  const l=loans.find(x=>x.id===p.loan_id);if(!l)return null;
  const c=clientFor(l.client_id),cy=cycles.find(x=>x.id===p.cycle_id)||cycleFor(l.id);
- const cyclePayments=payments.filter(x=>x.cycle_id===p.cycle_id).sort((a,b)=>String(a.created_at||a.payment_date).localeCompare(String(b.created_at||b.payment_date)));
+ const cyclePayments=payments.filter(x=>x.cycle_id===p.cycle_id).sort((a,b)=>String(a.created_at||a.payment_date).localeCompare(String(b.created_at||b.payment_date))||String(a.id).localeCompare(String(b.id)));
  const idx=cyclePayments.findIndex(x=>x.id===p.id);
  const beforePaid=cyclePayments.slice(0,idx<0?0:idx).reduce((s,x)=>s+Number(x.amount||0),0);
  const before=Math.max(0,Number(cy?.amount_due||0)-beforePaid),after=Math.max(0,before-Number(p.amount||0));
