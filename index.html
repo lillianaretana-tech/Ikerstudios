@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Cartera 24 V24</title>
+<title>Cartera 24 V25</title>
  
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#3a2923">
@@ -225,7 +225,7 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
    <p class="sub">Modalidades de 7, 15, 24 o 30 días efectivos · 20% fijo. Los domingos no cuentan para duración ni vencimiento.</p>
  </div>
 </section>
-<footer>Desarrollado por LillyTech · 3RS Integrated Solutions · V24</footer>
+<footer>Desarrollado por LillyTech · 3RS Integrated Solutions · V25</footer>
 </main>
 
 <nav class="nav">
@@ -342,7 +342,7 @@ async function loadAll(){
   sb.from('loans_payments').select('*').order('payment_date',{ascending:false}).limit(1000),
    sb.from('loans_morosos').select('*').order('full_name')
  ];
- if(operationalRead){base.push(sb.from('loans_expenses').select('*').order('expense_date',{ascending:false}),sb.from('loans_cash_movements').select('*').order('occurred_at',{ascending:false}))}
+ if(operationalRead){base.push(sb.from('loans_expenses').select('*').order('expense_date',{ascending:false}),sb.from('loans_cash_movements').select('*').order('occurred_at',{ascending:false}).order('id',{ascending:false}).limit(1000))}
  if(owner){base.push(sb.from('loans_capital_contributions').select('*').order('contribution_date',{ascending:false}).order('created_at',{ascending:false}))}
  const res=await Promise.all(base); const err=res.find(x=>x.error)?.error;
  // V23: Supabase limita normalmente a 1000 filas por consulta. Recuperar TODAS
@@ -356,6 +356,19 @@ async function loadAll(){
      if((page.data||[]).length<1000)break;
    }
    res[3].data=allPayments;
+   // V25: cargar todos los movimientos de caja; el saldo inicial necesita el historial completo.
+   if(operationalRead){
+     const allCash=[...(res[6].data||[])];
+     for(let offset=1000;allCash.length===offset;offset+=1000){
+       const page=await sb.from('loans_cash_movements').select('*')
+         .order('occurred_at',{ascending:false}).order('id',{ascending:false})
+         .range(offset,offset+999);
+       if(page.error){alert('No se pudo cargar el historial completo de caja: '+page.error.message);return}
+       allCash.push(...(page.data||[]));
+       if((page.data||[]).length<1000)break;
+     }
+     res[6].data=allCash;
+   }
  }
  if(err){alert('No se pudieron cargar los datos: '+err.message);return}
  clients=res[0].data||[];loans=res[1].data||[];cycles=res[2].data||[];payments=res[3].data||[];morosos=res[4].data||[];
