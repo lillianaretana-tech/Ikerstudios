@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Cartera 24 V23</title>
+<title>Cartera 24 V24</title>
  
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#3a2923">
@@ -225,7 +225,7 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
    <p class="sub">Modalidades de 7, 15, 24 o 30 días efectivos · 20% fijo. Los domingos no cuentan para duración ni vencimiento.</p>
  </div>
 </section>
-<footer>Desarrollado por LillyTech · 3RS Integrated Solutions · V23</footer>
+<footer>Desarrollado por LillyTech · 3RS Integrated Solutions · V24</footer>
 </main>
 
 <nav class="nav">
@@ -540,6 +540,36 @@ async function createClient(){
  setTimeout(()=>openClientFile(data.id),100);
 }
 function clientLoans(id){return loans.filter(l=>l.client_id===id).sort((a,b)=>String(b.start_date).localeCompare(String(a.start_date)))}
+// V24: historial visual de fechas de cobro sin registro de pago. No crea cargos ni pagos.
+function weekdayDate(iso){const d=new Date(String(iso).slice(0,10)+'T12:00:00Z');const day=new Intl.DateTimeFormat('es-CR',{weekday:'long',timeZone:'UTC'}).format(d);return day.charAt(0).toUpperCase()+day.slice(1)+' '+fmtDate(iso)}
+function clientCollectionHistory(ls,ps){
+ const today=todayISO(), entries=[];
+ const paidByDate=new Map();
+ for(const p of ps){const key=p.loan_id+'|'+String(p.payment_date).slice(0,10);paidByDate.set(key,(paidByDate.get(key)||0)+Number(p.amount||0));}
+ for(const l of ls){
+  const loanPayments=ps.filter(p=>p.loan_id===l.id).sort((a,b)=>String(a.payment_date).localeCompare(String(b.payment_date))||String(a.created_at).localeCompare(String(b.created_at)));
+  const loanCycles=cycles.filter(c=>c.loan_id===l.id);
+  const first=String(l.start_date||'').slice(0,10);
+  if(!first)continue;
+  const start=first>addCalendarDaysISO(today,-45)?first:addCalendarDaysISO(today,-45);
+  let day=start,guard=0;
+  while(day<=today&&guard++<50){
+   if(!isSundayISO(day)){
+    const paid=paidByDate.get(l.id+'|'+day)||0;
+    const prior=loanPayments.filter(p=>String(p.payment_date).slice(0,10)<day).reduce((n,p)=>n+Number(p.amount||0),0);
+    const amountDue=loanCycles.length?loanCycles.reduce((n,c)=>n+Number(c.amount_due||0),0):Number(l.principal||0)*(1+Number(l.interest_rate||0)/100);
+    const due=String(l.due_date||'').slice(0,10);
+    let effectiveDays=0;for(let dd=addCalendarDaysISO(first,1);dd<=day;dd=addCalendarDaysISO(dd,1)){if(!isSundayISO(dd))effectiveDays++;}
+    const frequency=l.collection_frequency||'daily';
+    const scheduled=frequency==='daily'||(frequency==='weekly'&&effectiveDays>0&&effectiveDays%7===0);
+    if(paid>0){entries.push({day,paid,loan:l});}
+    else if(scheduled&&day<today&&(!due||day<=due)&&prior<amountDue-0.001){entries.push({day,missed:true,loan:l});}
+   }
+   day=addCalendarDaysISO(day,1);
+  }
+ }
+ return entries.sort((a,b)=>b.day.localeCompare(a.day)||Number(b.paid||0)-Number(a.paid||0)).slice(0,35);
+}
 function openClientFile(id){
  const c=clients.find(x=>x.id===id); if(!c)return;
  const ls=clientLoans(id), ps=payments.filter(p=>ls.some(l=>l.id===p.loan_id)).sort((a,b)=>String(b.payment_date).localeCompare(String(a.payment_date)));
@@ -559,8 +589,10 @@ function openClientFile(id){
  </div>
  <h4 style="margin-bottom:6px">Créditos</h4>
  ${ls.length?ls.map(l=>`<div class="card"><div class="section-title" style="margin:0"><div><b>${fmtDate(l.start_date)}</b><div class="sub">${loanCycleLabel(l)} · Saldo ${money(balanceForLoan(l.id))}</div></div><button class="secondary" onclick="openLoanHistory('${l.id}')">Ver historial</button></div></div>`).join(''):'<div class="empty">Este cliente todavía no tiene créditos.</div>'}
- <h4 style="margin-bottom:6px">Últimos pagos</h4>
- ${ps.length?ps.slice(0,10).map(p=>`<div class="receipt-line"><span>${fmtDate(p.payment_date)}</span><b>${money(p.amount)}</b></div>`).join(''):'<div class="sub">Sin pagos registrados.</div>'}
+ <h4 style="margin-bottom:6px">Historial de cobros</h4>
+ <div class="sub" style="margin-bottom:8px">Los días sin pago se identifican automáticamente según el calendario del crédito. No significan que Alex haya visitado al cliente. No se incluyen domingos.</div>
+ ${clientCollectionHistory(ls,ps).map(e=>`<div class="receipt-line"><span>${weekdayDate(e.day)}${ls.length>1?` <small class="sub">· Crédito ${fmtDate(e.loan.start_date)}</small>`:''}</span><b style="${e.missed?'color:#ad432d':''}">${e.missed?'No registró pago':money(e.paid)}</b></div>`).join('')||'<div class="sub">Sin movimientos ni fechas pendientes recientes.</div>'}
+ ${ls.some(l=>l.collection_frequency==='custom')?'<div class="sub">Los cobros personalizados solo muestran pagos registrados; requieren un calendario definido para señalar ausencias.</div>':''}
  <div class="actions" style="margin-top:14px">${['owner','admin'].includes(role)?`<button class="primary" onclick="editClient('${c.id}')">Editar cliente</button>`:''}<button class="secondary" onclick="closeModal()">Cerrar</button></div>`;
  modal.classList.add('show');
 }
