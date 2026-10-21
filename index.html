@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Cartera 24 V26</title>
+<title>Cartera 24 V27</title>
  
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#3a2923">
@@ -161,8 +161,9 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
    <label>Fecha</label><input id="adminDailyDate" type="date" onchange="renderAdminDailySummary()">
    <div class="grid" style="margin-top:10px">
     <div class="stat"><small>Disponible inicial para prestar</small><b id="adminDayInitial">₡0</b></div>
-    <div class="stat"><small>Cobros recibidos</small><b id="adminDayCollected">₡0</b></div>
-    <div class="stat"><small>Préstamos realizados</small><b id="adminDayLoans">₡0</b></div>
+    <div class="stat"><small>Cobros cartera activa</small><b id="adminDayCollected">₡0</b></div>
+    <div class="stat"><small>Recuperación de morosos</small><b id="adminDayMorosos">₡0</b></div>
+     <div class="stat"><small>Préstamos realizados</small><b id="adminDayLoans">₡0</b></div>
     <div class="stat"><small>Gastos</small><b id="adminDayExpenses">₡0</b></div>
     <div class="stat"><small>Disponible al cierre</small><b id="adminDayFinal">₡0</b></div>
    </div>
@@ -382,6 +383,7 @@ async function loadAll(){
    const closeRes=await sb.from('loans_closings').select('*').order('closed_through',{ascending:false});
    if(closeRes.error){console.warn('Aplique la migración V22 para activar cierres manuales.',closeRes.error);closings=[]}else closings=closeRes.data||[];
   }else{collectors=[];closings=[]}
+ await loadMorosoPayments();
  render();
 }
 async function loadCollectors(){
@@ -499,7 +501,51 @@ function renderMorosos(){
  const list=morosos.filter(m=>[m.full_name,m.phone].some(v=>String(v||'').toLowerCase().includes(q)));
  const total=morosos.reduce((s,m)=>s+Number(m.opening_balance||0),0);
  const sm=document.getElementById('morosoSummary');if(sm)sm.textContent=`${morosos.length} cliente${morosos.length===1?'':'s'} · ${money(total)}`;
- box.innerHTML=list.map(m=>`<div class="card" style="border-left:5px solid var(--warn)"><div class="person" style="margin-bottom:0"><div class="avatar">⚠</div><div class="info"><b>${m.full_name}</b><small>${m.phone?m.phone+' · ':''}Saldo moroso ${money(m.opening_balance)}</small></div><span class="pill late">MOROSO</span></div>${['owner','admin'].includes(role)?`<button class="secondary big" style="margin-top:10px" onclick="openMorosoCollectionInstruction('${m.id}')">📲 Enviar cobro a Alex</button>`:''}</div>`).join('')||'<div class="empty">No se encontraron morosos.</div>';
+ box.innerHTML=list.map(m=>`<div class="card" style="border-left:5px solid var(--warn)"><div class="person" style="margin-bottom:0"><div class="avatar">⚠</div><div class="info"><b>${m.full_name}</b><small>${m.phone?m.phone+' · ':''}Saldo moroso ${money(m.opening_balance)}</small></div><span class="pill late">${Number(m.opening_balance||0)>0?'MOROSO':'SALDADO'}</span></div>${role==='owner'?`<button class="primary big" style="margin-top:10px" onclick="openMorosoPayment('${m.id}')" ${Number(m.opening_balance||0)<=0?'disabled':''}>💰 Registrar abono</button><button class="secondary big" style="margin-top:8px" onclick="openMorosoHistory('${m.id}')">📋 Historial de abonos</button>`:''}${['owner','admin'].includes(role)?`<button class="secondary big" style="margin-top:10px" onclick="openMorosoCollectionInstruction('${m.id}')">📲 Enviar cobro a Alex</button>`:''}</div>`).join('')||'<div class="empty">No se encontraron morosos.</div>';
+}
+
+let morosoPayments=[];
+async function loadMorosoPayments(){
+ if(role!=='owner'){morosoPayments=[];return;}
+ const {data,error}=await sb.from('loans_moroso_payments').select('*').order('paid_at',{ascending:false}).limit(1000);
+ if(error){console.warn('Historial de morosos:',error);morosoPayments=[];return;}
+ morosoPayments=data||[];
+}
+function openMorosoHistory(id){
+ if(role!=='owner')return;
+ const m=morosos.find(x=>x.id===id);if(!m)return;
+ const rows=morosoPayments.filter(x=>x.moroso_id===id);
+ sheet.innerHTML=`<h3>Historial de morosos</h3><div class="sub">${m.full_name} · Saldo pendiente ${money(m.opening_balance)}</div>`+
+ (rows.map(x=>`<div class="card" style="margin-top:8px"><b>${money(x.amount)}</b> · ${new Date(x.paid_at).toLocaleString('es-CR',{timeZone:'America/Costa_Rica'})}<div class="sub">${x.payment_method==='sinpe'?'SINPE':'Efectivo'} · ${x.notes||'Sin nota'}</div></div>`).join('')||'<div class="empty">No hay abonos registrados.</div>')+
+ `<div class="actions"><button class="secondary" onclick="closeModal()">Cerrar</button></div>`;
+ modal.classList.add('show');
+}
+function openMorosoPayment(id){
+ if(role!=='owner'){alert('Solo Iker puede registrar abonos de morosos.');return;}
+ const m=morosos.find(x=>x.id===id);if(!m||Number(m.opening_balance)<=0)return;
+ sheet.innerHTML=`<h3>💰 Registrar abono de moroso</h3><div class="sub"><b>${m.full_name}</b> · Saldo pendiente ${money(m.opening_balance)}</div>
+ <label>Monto recibido</label><input id="morosoPayAmount" type="number" min="1" step="1" max="${m.opening_balance}" placeholder="Monto exacto recibido">
+ <label>Forma de pago</label><select id="morosoPayMethod"><option value="cash">Efectivo</option><option value="sinpe">SINPE</option></select>
+ <label>Nota (opcional)</label><input id="morosoPayNote" maxlength="200" placeholder="Referencia del pago">
+ <div class="role-note">El abono disminuirá la deuda morosa y aumentará el disponible. No crea un préstamo activo.</div>
+ <div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="confirmMorosoPayment('${id}')">Continuar</button></div>`;
+ modal.classList.add('show');
+}
+function confirmMorosoPayment(id){
+ const m=morosos.find(x=>x.id===id);if(!m||role!=='owner')return;
+ const amount=Number(document.getElementById('morosoPayAmount').value),method=document.getElementById('morosoPayMethod').value,notes=document.getElementById('morosoPayNote').value.trim();
+ if(!Number.isSafeInteger(amount)||amount<=0||amount>Number(m.opening_balance)){alert('Revise el monto. No puede superar la deuda.');return;}
+ const req=crypto.randomUUID();
+ sheet.innerHTML=`<h3>Confirmar recuperación</h3><div class="card"><b>${m.full_name}</b><div>Saldo anterior: ${money(m.opening_balance)}</div><div>Abono: ${money(amount)}</div><div>Saldo restante: ${money(Number(m.opening_balance)-amount)}</div><div>Forma: ${method==='sinpe'?'SINPE':'Efectivo'}</div></div><div class="actions"><button class="secondary" onclick="openMorosoPayment('${id}')">Atrás</button><button class="primary" id="morosoFinalSave">Confirmar abono</button></div>`;
+ document.getElementById('morosoFinalSave').onclick=()=>saveMorosoPayment(id,amount,method,notes,req);
+}
+async function saveMorosoPayment(id,amount,method,notes,req){
+ if(role!=='owner')return;
+ const btn=document.getElementById('morosoFinalSave');if(btn){btn.disabled=true;btn.textContent='Guardando…';}
+ const {data,error}=await sb.rpc('loans_register_moroso_payment',{p_moroso_id:id,p_amount:amount,p_method:method,p_notes:notes||null,p_request_id:req});
+ if(error){alert('No se pudo registrar el abono: '+error.message);if(btn){btn.disabled=false;btn.textContent='Reintentar guardar';}return;}
+ closeModal();await loadAll();await loadMorosoPayments();renderMorosos();
+ alert('Abono registrado. Se actualizó la deuda morosa y la caja. Comprobante interno: '+String(data).slice(0,8));
 }
 function openMorosoCollectionInstruction(id){
  const m=morosos.find(x=>x.id===id);if(!m)return;
@@ -939,12 +985,13 @@ function renderAdminDailySummary(){
  const initial=cashMovements.filter(m=>movementDate(m)<d).reduce((s,m)=>s+Number(m.amount||0),0);
  const dm=cashMovements.filter(m=>movementDate(m)===d);
  const collected=dm.filter(m=>m.movement_type==='payment').reduce((s,m)=>s+Number(m.amount||0),0);
+ const recovered=dm.filter(m=>m.movement_type==='moroso_recovery').reduce((s,m)=>s+Number(m.amount||0),0);
  const placed=Math.abs(dm.filter(m=>m.movement_type==='loan_disbursement').reduce((s,m)=>s+Number(m.amount||0),0));
  const spent=Math.abs(dm.filter(m=>m.movement_type==='expense').reduce((s,m)=>s+Number(m.amount||0),0));
  const other=dm.filter(m=>!['payment','loan_disbursement','expense'].includes(m.movement_type)).reduce((s,m)=>s+Number(m.amount||0),0);
  const final=initial+collected-placed-spent+other;
  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=money(v)};
- set('adminDayInitial',initial);set('adminDayCollected',collected);set('adminDayLoans',placed);set('adminDayExpenses',spent);set('adminDayFinal',final);
+ set('adminDayInitial',initial);set('adminDayCollected',collected);set('adminDayMorosos',recovered);set('adminDayLoans',placed);set('adminDayExpenses',spent);set('adminDayFinal',final);
 }
 function renderAdmin(){if(!['owner','admin','technical_support','collector'].includes(role))return;
  renderAdminDailySummary();
