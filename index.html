@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Cartera 24 V27</title>
+<title>Cartera 24 V28</title>
  
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#3a2923">
@@ -141,7 +141,7 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
 </section>
 
 <section id="clients" class="view">
- <div class="section-title"><h2>Clientes</h2><button class="primary owner-only" onclick="openNewClient()">＋ Nuevo cliente</button></div>
+ <div class="section-title"><h2>Clientes con crédito vigente</h2><button class="primary owner-only" onclick="openNewClient()">＋ Nuevo cliente</button></div>
  <input id="search" placeholder="Buscar por número, nombre, apellido, apodo o teléfono…" oninput="renderClients()">
  <div id="clientList" style="margin-top:12px"></div>
 </section>
@@ -486,11 +486,11 @@ function renderLoans(){
 function clientDisplayName(c){const legal=[c.first_name,c.last_name].filter(Boolean).join(' ');return legal||c.nickname||c.full_name||'Cliente'}
 function renderClients(){
  let q=(document.getElementById('search')?.value||'').trim().toLowerCase();
- let list=clients.filter(c=>[c.client_number,c.first_name,c.last_name,c.nickname,c.phone,c.full_name].some(v=>String(v||'').toLowerCase().includes(q)));
+ let list=clients.filter(c=>loans.some(l=>l.client_id===c.id&&['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0)).filter(c=>[c.client_number,c.first_name,c.last_name,c.nickname,c.phone,c.full_name].some(v=>String(v||'').toLowerCase().includes(q)));
  clientList.innerHTML=list.map(c=>{
    let ls=loans.filter(l=>l.client_id===c.id),bal=ls.reduce((s,l)=>s+balanceForLoan(l.id),0);
    const nm=clientDisplayName(c); return `<div class="card person"><div class="avatar">${(c.first_name||c.full_name||'?')[0]}</div><div class="info"><b>#${c.client_number||'—'} · ${nm}</b><small>${c.nickname&&nm!==c.nickname?`Apodo: ${c.nickname} · `:''}${c.phone?`${c.phone} · `:''}Saldo ${money(bal)}</small></div><button class="secondary" onclick="openClientFile('${c.id}')">Expediente</button></div>`;
- }).join('')||'<div class="empty">Sin clientes.</div>';
+ }).join('')||'<div class="empty">No hay clientes con crédito vigente.</div>';
 }
 
 
