@@ -456,6 +456,7 @@ function render(){
  // Resumen diario: solo colocaciones nuevas; la cartera migrada/tarjetas anteriores no cuenta como dinero prestado hoy.
  const newLoans=loans.filter(l=>String(l.start_date||'').slice(0,10)===today && l.source_type!=='physical_card');
  const placedTodayAmount=newLoans.reduce((s,l)=>s+Number(l.principal||0),0);
+ renderYesterdayClose();
  available.textContent=money(cash);dueToday.textContent=money(due);document.getElementById('collected').textContent=money(collected);pending.textContent=money(pendingAmount);expenses.textContent=money(exp);
  const nlt=document.getElementById('newLoansToday'),pt=document.getElementById('placedToday'); if(nlt)nlt.textContent=String(newLoans.length); if(pt)pt.textContent=money(placedTodayAmount);
  countToday.textContent=pendingLoans.length+' pendiente'+(pendingLoans.length===1?'':'s');
