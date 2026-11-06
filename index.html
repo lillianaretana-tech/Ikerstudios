@@ -255,7 +255,13 @@ const ALEX_COLLECTOR_ID='38b5b477-0619-42ab-8f88-b65390146352';
 const ALEX_COLLECTOR_NAME='Alex';
 const FIRST_MANUAL_PERIOD_START='2026-10-05';
 let session=null, role=null, clients=[], loans=[], cycles=[], payments=[], loanExpenses=[], cashMovements=[], capitalContributions=[], collectors=[], morosos=[], closings=[];
-const todayISO=()=>new Date().toLocaleDateString('en-CA',{timeZone:'America/Costa_Rica'});
+// Formato ISO estable independientemente del idioma/configuración del navegador.
+function costaRicaISO(date){
+ const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Costa_Rica',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date);
+ const get=type=>parts.find(p=>p.type===type)?.value;
+ return get('year')+'-'+get('month')+'-'+get('day');
+}
+const todayISO=()=>costaRicaISO(new Date());
 const fmtDate=s=>{if(!s)return '—';let [y,m,d]=s.slice(0,10).split('-');return `${d}/${m}/${y}`};
 const cycleFor=id=>cycles.filter(c=>c.loan_id===id).sort((a,b)=>b.cycle_number-a.cycle_number)[0];
 const paidForCycle=id=>payments.filter(p=>p.cycle_id===id).reduce((s,p)=>s+Number(p.amount),0);
@@ -423,8 +429,8 @@ function termLabel(l){const days=loanTermDays(l);return l?.credit_term_code?'Pla
 function scheduledTodayForLoan(l){if(isSundayISO(todayISO()))return 0;return Math.min(Number(l.expected_payment||0),balanceForLoan(l.id)+paidTodayForLoan(l.id))}
 function pendingTodayForLoan(l){return Math.max(0,scheduledTodayForLoan(l)-paidTodayForLoan(l.id))}
 function pendingTodayLoans(){return todayLoans().filter(l=>pendingTodayForLoan(l)>0)}
-function localISOOffset(days){const d=new Date();d.setDate(d.getDate()+days);return d.toLocaleDateString('en-CA',{timeZone:'America/Costa_Rica'})}
-function movementDate(m){if(!m?.occurred_at)return '';return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Costa_Rica',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(m.occurred_at))}
+function localISOOffset(days){const [y,m,d]=todayISO().split('-').map(Number);return new Date(Date.UTC(y,m-1,d+days)).toISOString().slice(0,10)}
+function movementDate(m){if(!m?.occurred_at)return '';return costaRicaISO(new Date(m.occurred_at))}
 function renderYesterdayClose(){
  if(!['owner','admin','technical_support'].includes(role))return;
  const y=localISOOffset(-1);
