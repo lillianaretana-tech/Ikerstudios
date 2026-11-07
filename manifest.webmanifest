@@ -1,36 +1,24 @@
 {
-  "name": "Cartera 24",
-  "short_name": "Cartera 24",
-  "description": "Control de cobros y préstamos",
-  "start_url": "./",
+  "name": "Cartera 24 V29 — PRUEBAS",
+  "short_name": "Cartera24 TEST",
+  "description": "Versión V29 para pruebas; no utiliza datos de producción",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#F7EFE4",
-  "theme_color": "#3A2923",
+  "background_color": "#2b211d",
+  "theme_color": "#3a2923",
   "icons": [
     {
-      "src": "./icon-192.png",
+      "src": "icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
-      "src": "./icon-512.png",
+      "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "./icon-maskable-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "./icon-maskable-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     }
   ]
 }

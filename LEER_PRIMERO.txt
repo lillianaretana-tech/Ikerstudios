@@ -1,0 +1,8 @@
+CARTERA 24 V29 - APLICACION DE PRUEBAS
+
+Esta version apunta EXCLUSIVAMENTE a Supabase TEST.
+Subir los 5 archivos web (index.html, manifest.webmanifest, service-worker.js y ambos iconos) a un alojamiento HTTPS de pruebas, o servirlos localmente con un servidor HTTP.
+No reemplazar el index.html de produccion con este archivo.
+No se ha publicado automaticamente en GitHub Pages.
+Para entrar se requieren usuarios de prueba existentes en Supabase TEST.
+El respaldo TEST existente permanece sin modificaciones.
