@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Cartera 24 V28</title>
+<title>Cartera 24 V29</title>
  
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#3a2923">
@@ -85,7 +85,7 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
 <div id="loading" class="loading">Cargando Cartera 24…</div>
 <div id="authScreen" class="auth-screen hidden"><div class="auth-card">
 <h1>Cartera 24</h1><p>Acceso seguro · LillyTech / 3RS Integrated Solutions</p>
-<label>Correo</label><input id="authEmail" type="email" value="ikerbusiness40@gmail.com" autocomplete="email">
+<label>Correo</label><input id="authEmail" type="email" value="" autocomplete="email" placeholder="Correo">
 <label>Contraseña</label><input id="authPassword" type="password" autocomplete="current-password" placeholder="Contraseña">
 <button class="primary big" style="margin-top:14px" onclick="login()">Ingresar</button>
 
@@ -170,8 +170,8 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
   </div>
  </div>
  <div class="admin-quick collector-readable" style="margin-top:10px">
-  <button class="secondary big admin-module-btn" id="creditsDateToggle" onclick="toggleAdminPanel('recentCreditsBody','creditsDateToggle')">📅 Créditos por fecha <span>▼</span></button>
-  <div class="card admin-collapsible" id="recentCreditsBody" style="display:none;margin-top:8px">
+  <button class="secondary big admin-module-btn no-collector" id="creditsDateToggle" onclick="toggleAdminPanel('recentCreditsBody','creditsDateToggle')">📅 Créditos por fecha <span>▼</span></button>
+  <div class="card admin-collapsible no-collector" id="recentCreditsBody" style="display:none;margin-top:8px">
    <div class="sub">Consulta los créditos nuevos entregados en una fecha. Las tarjetas antiguas migradas no se incluyen.</div>
    <label>Fecha</label><input id="recentCreditDate" type="date" onchange="renderRecentCreditsByDate()">
    <div id="recentCreditsResult" style="margin-top:10px"></div>
@@ -230,14 +230,14 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
    <p class="sub">Modalidades de 7, 15, 24 o 30 días efectivos · 20% fijo. Los domingos no cuentan para duración ni vencimiento.</p>
  </div>
 </section>
-<footer>Desarrollado por LillyTech · 3RS Integrated Solutions · V25</footer>
+<footer>Desarrollado por LillyTech · 3RS Integrated Solutions · V29</footer>
 </main>
 
 <nav class="nav">
  <button class="active" onclick="go('daily',this)"><span>⌂</span>Hoy</button>
  <button onclick="go('loans',this)"><span>▤</span>Créditos</button>
  <button onclick="go('clients',this)"><span>♙</span>Clientes</button>
- <button onclick="go('morosos',this)"><span>⚠️</span>Morosos</button>
+ <button class="no-collector" onclick="go('morosos',this)"><span>⚠️</span>Morosos</button>
   <button onclick="go('admin',this)"><span>⚙</span>Admin</button>
 </nav>
 </div>
@@ -341,7 +341,9 @@ async function enterApp(){
  setLoading(true); authScreen.classList.add('hidden'); logoutBtn.style.display='inline-block';
  const {data:a,error:e}=await sb.rpc('get_my_app_access',{p_app:'loans'}).maybeSingle();
  if(e||!a){setLoading(false);authScreen.classList.remove('hidden');authMessage('Esta cuenta todavía no tiene acceso a Préstamos.');return}
- role=a.role; applyRoleUI(); await loadAll(); await auditEvent('login'); setLoading(false); if(needsC24PasswordSetup()) setTimeout(openRequiredPasswordChange,120);
+ role=a.role; applyRoleUI();
+ try{const ct=await sb.rpc('loans_app_contract_version');window._dbContract=ct.error?0:Number(ct.data)||0}catch(e){window._dbContract=0}
+ await loadAll(); await auditEvent('login'); setLoading(false); if(needsC24PasswordSetup()) setTimeout(openRequiredPasswordChange,120);
 }
 async function loadAll(){
  const owner=['owner','admin','technical_support'].includes(role);
@@ -350,10 +352,10 @@ async function loadAll(){
   sb.from('loans_clients').select('*').eq('active',true).order('full_name'),
   sb.from('loans_loans').select('*').order('created_at',{ascending:false}),
   sb.from('loans_cycles').select('*').order('cycle_number'),
-  sb.from('loans_payments').select('*').order('payment_date',{ascending:false}).limit(1000),
-   sb.from('loans_morosos').select('*').order('full_name')
+  sb.from('loans_payments').select('*').order('payment_date',{ascending:false}).order('id',{ascending:false}).limit(1000),
+   (owner?sb.from('loans_morosos').select('*').order('full_name'):Promise.resolve({data:[],error:null}))
  ];
- if(operationalRead){base.push(sb.from('loans_expenses').select('*').order('expense_date',{ascending:false}),sb.from('loans_cash_movements').select('*').order('occurred_at',{ascending:false}).order('id',{ascending:false}).limit(1000))}
+ if(owner){base.push(sb.from('loans_expenses').select('*').order('expense_date',{ascending:false}),sb.from('loans_cash_movements').select('*').order('occurred_at',{ascending:false}).order('id',{ascending:false}).limit(1000))}
  if(owner){base.push(sb.from('loans_capital_contributions').select('*').order('contribution_date',{ascending:false}).order('created_at',{ascending:false}))}
  const res=await Promise.all(base); const err=res.find(x=>x.error)?.error;
  // V23: Supabase limita normalmente a 1000 filas por consulta. Recuperar TODAS
@@ -361,14 +363,14 @@ async function loadAll(){
  if(!err){
    const allPayments=[...(res[3].data||[])];
    for(let offset=1000;allPayments.length===offset;offset+=1000){
-     const page=await sb.from('loans_payments').select('*').order('payment_date',{ascending:false}).range(offset,offset+999);
+     const page=await sb.from('loans_payments').select('*').order('payment_date',{ascending:false}).order('id',{ascending:false}).range(offset,offset+999);
      if(page.error){alert('No se pudieron cargar todos los pagos: '+page.error.message);return}
      allPayments.push(...(page.data||[]));
      if((page.data||[]).length<1000)break;
    }
    res[3].data=allPayments;
    // V25: cargar todos los movimientos de caja; el saldo inicial necesita el historial completo.
-   if(operationalRead){
+   if(owner){
      const allCash=[...(res[6].data||[])];
      for(let offset=1000;allCash.length===offset;offset+=1000){
        const page=await sb.from('loans_cash_movements').select('*')
@@ -383,31 +385,40 @@ async function loadAll(){
  }
  if(err){alert('No se pudieron cargar los datos: '+err.message);return}
  clients=res[0].data||[];loans=res[1].data||[];cycles=res[2].data||[];payments=res[3].data||[];morosos=res[4].data||[];
- loanExpenses=operationalRead?(res[5].data||[]):[]; cashMovements=operationalRead?(res[6].data||[]):[]; capitalContributions=owner?(res[7].data||[]):[];
+ loanExpenses=owner?(res[5].data||[]):[]; cashMovements=owner?(res[6].data||[]):[]; capitalContributions=owner?(res[7].data||[]):[];
   if(owner){
    await loadCollectors();
    const closeRes=await sb.from('loans_closings').select('*').order('closed_through',{ascending:false});
    if(closeRes.error){console.warn('Aplique la migración V22 para activar cierres manuales.',closeRes.error);closings=[]}else closings=closeRes.data||[];
   }else{collectors=[];closings=[]}
  await loadMorosoPayments();
+ window._lastLoad=Date.now();
  render();
 }
+document.addEventListener('visibilitychange',()=>{
+ if(document.visibilityState!=='visible'||!session||!role)return;
+ if(window._payBusy||window._refiBusy)return;
+ if(modal&&modal.classList.contains('show'))return;
+ if(Date.now()-(window._lastLoad||0)<30000)return;
+ loadAll();
+});
 async function loadCollectors(){
  const {data:a,error}=await sb.from('app_access').select('user_id,active').eq('app','loans').eq('role','collector');
  if(error){console.warn(error);collectors=[];return}
  const ids=(a||[]).map(x=>x.user_id); if(!ids.length){collectors=[];return}
  const {data:p}=await sb.from('app_profiles').select('user_id,full_name,active').in('user_id',ids);
- collectors=(a||[]).map(x=>({...x,full_name:(p||[]).find(y=>y.user_id===x.user_id)?.full_name||'Cobrador'}));
+ collectors=(a||[]).map(x=>({...x,active:!!x.active && !!(p||[]).find(y=>y.user_id===x.user_id)?.active,full_name:(p||[]).find(y=>y.user_id===x.user_id)?.full_name||'Cobrador'}));
 }
 function applyRoleUI(){
  const fullView=['owner','admin','technical_support'].includes(role);
  const collectorView=role==='collector';
  const tech=role==='technical_support';
+ if(collectorView) document.querySelectorAll('.no-collector').forEach(x=>{x.style.setProperty('display','none','important')});
  document.querySelectorAll('.owner-only').forEach(x=>x.style.display=fullView?'':'none');
  document.querySelectorAll('.collector-readable').forEach(x=>x.style.display=(fullView||collectorView)?'':'none');
  const adminBtn=document.querySelector('.nav button[onclick*="admin"]');
  if(adminBtn) adminBtn.style.display=(fullView||collectorView)?'':'none';
- document.querySelector('.nav').style.gridTemplateColumns=(fullView||collectorView)?'repeat(5,1fr)':'repeat(4,1fr)';
+ document.querySelector('.nav').style.gridTemplateColumns=fullView?'repeat(5,1fr)':'repeat(4,1fr)';
  // Soporte técnico: puede ver toda la información administrativa, pero no ejecutar acciones de propietario.
  if(tech){
    document.querySelectorAll('.owner-only').forEach(x=>{
@@ -989,6 +1000,14 @@ function renderAdminDailySummary(){
  const input=document.getElementById('adminDailyDate');if(!input)return;
  if(!input.value)input.value=localISOOffset(-1);
  const d=input.value;
+ const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=money(v)};
+ // Cobrador: solo cobros de sus créditos (tabla de pagos). Sin capital, gastos, colocaciones ni caja.
+ if(role==='collector'){
+  ['adminDayInitial','adminDayMorosos','adminDayLoans','adminDayExpenses','adminDayFinal'].forEach(id=>{const e=document.getElementById(id);if(e&&e.parentElement)e.parentElement.style.display='none'});
+  const mine=payments.filter(p=>String(p.payment_date||'').slice(0,10)===d);
+  set('adminDayCollected',mine.reduce((s,p)=>s+Number(p.amount||0),0));
+  return;
+ }
  const initial=cashMovements.filter(m=>movementDate(m)<d).reduce((s,m)=>s+Number(m.amount||0),0);
  const dm=cashMovements.filter(m=>movementDate(m)===d);
  const collected=dm.filter(m=>m.movement_type==='payment').reduce((s,m)=>s+Number(m.amount||0),0);
@@ -997,7 +1016,6 @@ function renderAdminDailySummary(){
  const spent=Math.abs(dm.filter(m=>m.movement_type==='expense').reduce((s,m)=>s+Number(m.amount||0),0));
  const other=dm.filter(m=>!['payment','loan_disbursement','expense'].includes(m.movement_type)).reduce((s,m)=>s+Number(m.amount||0),0);
  const final=initial+collected-placed-spent+other;
- const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=money(v)};
  set('adminDayInitial',initial);set('adminDayCollected',collected);set('adminDayMorosos',recovered);set('adminDayLoans',placed);set('adminDayExpenses',spent);set('adminDayFinal',final);
 }
 function renderAdmin(){if(!['owner','admin','technical_support','collector'].includes(role))return;
@@ -1026,10 +1044,10 @@ async function confirmRefinance(id){
   if(!cy||!isCycleDue(cy)){alert('Este crédito todavía no está listo para refinanciar.');return}
  const rem=cycleRemaining(cy),next=Math.round(rem*1.20*100)/100;
   if(!confirm(`¿Refinanciar el saldo de ${money(rem)} de ${c.full_name}?\n\nNuevo ciclo: ${money(next)}\nInterés: 20%\n${termLabel(l)}`))return;
- setLoading(true);
- const {error}=await sb.rpc('loans_refinance_cycle',{p_loan_id:id});
- setLoading(false);
- if(error){alert('No se pudo refinanciar: '+error.message);return}
+ if(window._refiBusy)return;window._refiBusy=true;setLoading(true);
+ let error;try{({error}=await sb.rpc('loans_refinance_cycle',{p_loan_id:id}))}catch(e){error={message:String(e&&e.message||e)}}
+ window._refiBusy=false;setLoading(false);
+ if(error){alert('No se pudo refinanciar: '+error.message+'\nRevise el crédito antes de repetir.');await loadAll();return}
  await loadAll();
  alert(`Refinanciamiento creado correctamente.\nNuevo saldo del ciclo: ${money(next)}.`);
  openLoanHistory(id);
@@ -1041,7 +1059,7 @@ function openPay(id){
  const suggested=pendingTodayForLoan(l);
   sheet.innerHTML=`<h3>Registrar cobro</h3><div class="sub"><b>${clientDisplayName(c)}</b> · saldo actual ${money(bal)}</div>${overdue?`<div class="overdue-alert">⚠ CRÉDITO VENCIDO<br><span style="font-size:12px;font-weight:700">Venció el ${fmtDate(cy.due_date)} · ${termLabel(l)}</span></div>`:''}${migrated?`<div class="role-note">Tarjeta migrada · cuota pactada de hoy: <b>${money(scheduledTodayForLoan(l))}</b>. Puede registrar el monto realmente recibido.</div>`:''}<label>Monto recibido</label><input id="payAmount" type="number" min="1" max="${bal}" value="${suggested||''}" placeholder="Monto recibido"><label>Forma de pago</label><select id="payMethod"><option value="cash">Efectivo</option><option value="sinpe">SINPE</option></select><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="confirmQuickPay('${id}')">Continuar</button></div>`;modal.classList.add('show')
 }
-function confirmQuickPay(id){const l=loans.find(x=>x.id===id),c=clientFor(l.client_id),cy=activeCycleForLoan(id),overdue=cy&&isCycleOverdue(cy),bal=balanceForLoan(id),a=Number(payAmount.value),method=payMethod.value;if(!a||a<=0||a>bal){alert('Revise el monto recibido.');return}sheet.innerHTML=`<h3>Confirmar pago</h3>${overdue?'<div class="overdue-alert">⚠ CRÉDITO VENCIDO</div>':''}<div class="card"><div class="receipt-line"><span>Cliente</span><b>${clientDisplayName(c)}</b></div><div class="receipt-line"><span>Saldo actual</span><b>${money(bal)}</b></div><div class="receipt-line"><span>Recibe</span><b>${money(a)}</b></div><div class="receipt-line"><span>Nuevo saldo</span><b>${money(bal-a)}</b></div><div class="receipt-line"><span>Forma</span><b>${method==='sinpe'?'SINPE':'Efectivo'}</b></div></div><div class="actions"><button class="secondary" onclick="openPay('${id}')">Atrás</button><button class="primary" onclick="payConfirmed('${id}',${a},'${method}')">Registrar pago</button></div>`}
+async function confirmQuickPay(id){const l=loans.find(x=>x.id===id),c=clientFor(l.client_id),cy=activeCycleForLoan(id),overdue=cy&&isCycleOverdue(cy),bal0=balanceForLoan(id),a=Number(payAmount.value),method=payMethod.value;if(!a||a<=0){alert('Revise el monto recibido.');return}let bal=bal0;try{const st=await sb.rpc('loans_get_loan_state',{p_loan_id:id});const r0=Array.isArray(st.data)?st.data[0]:st.data;if(!st.error&&r0&&isFinite(Number(r0.balance))){bal=Number(r0.balance);if(Math.abs(bal-bal0)>0.009)alert('El saldo cambió en el servidor: ahora es '+money(bal)+'.')}}catch(e){}if(a>bal){alert('El monto supera el saldo actual ('+money(bal)+').');return}sheet.innerHTML=`<h3>Confirmar pago</h3>${overdue?'<div class="overdue-alert">⚠ CRÉDITO VENCIDO</div>':''}<div class="card"><div class="receipt-line"><span>Cliente</span><b>${clientDisplayName(c)}</b></div><div class="receipt-line"><span>Saldo actual</span><b>${money(bal)}</b></div><div class="receipt-line"><span>Recibe</span><b>${money(a)}</b></div><div class="receipt-line"><span>Nuevo saldo</span><b>${money(bal-a)}</b></div><div class="receipt-line"><span>Forma</span><b>${method==='sinpe'?'SINPE':'Efectivo'}</b></div></div><div class="actions"><button class="secondary" onclick="openPay('${id}')">Atrás</button><button class="primary" onclick="payConfirmed('${id}',${a},'${method}')">Registrar pago</button></div>`}
 async function payConfirmed(id,a,method){window._quickPay={amount:a,method};await pay(id)}
 
 
@@ -1053,7 +1071,8 @@ function receiptData(paymentId){
  const cyclePayments=payments.filter(x=>x.cycle_id===p.cycle_id).sort((a,b)=>String(a.created_at||a.payment_date).localeCompare(String(b.created_at||b.payment_date))||String(a.id).localeCompare(String(b.id)));
  const idx=cyclePayments.findIndex(x=>x.id===p.id);
  const beforePaid=cyclePayments.slice(0,idx<0?0:idx).reduce((s,x)=>s+Number(x.amount||0),0);
- const before=Math.max(0,Number(cy?.amount_due||0)-beforePaid),after=Math.max(0,before-Number(p.amount||0));
+ let before=Math.max(0,Number(cy?.amount_due||0)-beforePaid),after=Math.max(0,before-Number(p.amount||0));
+ const sr=(window._srvReceipts||{})[paymentId];if(sr&&isFinite(sr.before)&&isFinite(sr.after)){before=sr.before;after=sr.after}
  const migrated=l.source_type==='physical_card';
  const installmentNumber=idx>=0?idx+1:cyclePayments.length;
  return {p,l,c,cy,before,after,no:receiptNumber(p),migrated,installmentNumber};
@@ -1118,17 +1137,92 @@ function printPaymentReceipt(paymentId){
  const r=receiptData(paymentId);if(!r)return;const w=window.open('','_blank');
  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${r.no}</title><style>@page{size:A5;margin:12mm}body{font-family:Arial;color:#292421}.box{border:1px solid #cdb39e;border-radius:14px;padding:22px}.brand{text-align:center;background:#3a2923;color:#fff;padding:18px;border-radius:10px;margin-bottom:18px}.brand b{font-size:25px}.row{display:flex;justify-content:space-between;border-bottom:1px solid #eadfd4;padding:10px 0}.foot{text-align:center;color:#756a63;font-size:11px;margin-top:20px}@media print{button{display:none}}</style></head><body><div class="box"><div class="brand"><b>CARTERA 24</b><div>COMPROBANTE DE PAGO</div></div>${[['Recibo',r.no],['Cliente',r.c.full_name||'Cliente'],['Fecha',fmtDate(r.p.payment_date)],['Forma de pago',r.p.payment_method==='sinpe'?'SINPE':'Efectivo'],['Saldo anterior',money(r.before)],['Abono recibido',money(r.p.amount)],['Nuevo saldo',money(r.after)],[r.migrated?'Concepto':'Cuota',r.migrated?'Abono a saldo anterior':'#'+r.installmentNumber]].map(x=>`<div class="row"><span>${x[0]}</span><b>${x[1]}</b></div>`).join('')}<div class="foot">Gracias por su pago<br>LillyTech · 3RS Integrated Solutions</div></div><button onclick="window.print()">Guardar como PDF / Imprimir</button><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);w.document.close();
 }
-async function pay(id){
- let l=loans.find(x=>x.id===id),cy=cycleFor(id),bal=balanceForLoan(id),a=Number(window._quickPay?.amount ?? document.getElementById('payAmount')?.value),method=window._quickPay?.method ?? document.getElementById('payMethod')?.value;
- if(!a||a<=0||a>bal){alert('Revise el monto recibido.');return}
- setLoading(true);
- const {data:p,error}=await sb.from('loans_payments').insert({loan_id:id,cycle_id:cy.id,amount:a,payment_date:todayISO(),payment_method:method,received_by:session.user.id,created_by:session.user.id}).select().single();
- if(error){setLoading(false);alert(error.message);return}
- await sb.from('loans_cash_movements').insert({movement_type:'payment',amount:a,loan_id:id,payment_id:p.id,created_by:session.user.id,notes:method==='sinpe'?'Cobro recibido por SINPE':'Cobro recibido en efectivo'});
- window._quickPay=null;await auditEvent('payment_recorded','payment',p.id,null,{loan_id:id,amount:a,payment_method:method});await loadAll();setLoading(false);openPaymentReceipt(p.id);
+// V29 (borrador): referencia de cobro persistente. Se reutiliza hasta recibir una respuesta definitiva del servidor,
+// de modo que un reintento tras corte de red NO duplica el cobro.
+function payReqKey(id,a,method){return id+'|'+Number(a)+'|'+method}
+function payReqGet(id,a,method){
+ const k=payReqKey(id,a,method);let m={};
+ try{m=JSON.parse(localStorage.getItem('c24_pay_req')||'{}')}catch(e){m=window._payReqMem||{}}
+ const now=Date.now();Object.keys(m).forEach(x=>{if(now-(m[x].t||0)>86400000)delete m[x]});
+ if(!m[k])m[k]={id:crypto.randomUUID(),t:now};
+ try{localStorage.setItem('c24_pay_req',JSON.stringify(m))}catch(e){window._payReqMem=m}
+ return m[k].id;
 }
-function openExpense(){sheet.innerHTML=`<h3>Registrar gasto</h3><label>Concepto</label><input id="expenseConcept" placeholder="Ej. transporte"><label>Monto</label><input id="expenseAmount" type="number" placeholder="0"><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveExpense()">Guardar</button></div>`;modal.classList.add('show')}
-async function saveExpense(){let a=Number(expenseAmount.value),concept=expenseConcept.value.trim();if(!a||a<=0||!concept)return;setLoading(true);const {data:e,error}=await sb.from('loans_expenses').insert({concept,amount:a,expense_date:todayISO(),created_by:session.user.id}).select().single();if(error){setLoading(false);alert(error.message);return}await sb.from('loans_cash_movements').insert({movement_type:'expense',amount:-a,expense_id:e.id,created_by:session.user.id});closeModal();await loadAll();setLoading(false)}
+function payReqClear(id,a,method){
+ const k=payReqKey(id,a,method);let m={};
+ try{m=JSON.parse(localStorage.getItem('c24_pay_req')||'{}');delete m[k];localStorage.setItem('c24_pay_req',JSON.stringify(m))}catch(e){if(window._payReqMem)delete window._payReqMem[k]}
+}
+async function pay(id){
+ if(window._payBusy)return;
+ if((window._dbContract||0)<4){alert('La base de datos todavía no tiene instalado el cobro seguro. No se puede cobrar desde esta versión; avise al administrador.');return}
+ const a=Number(window._quickPay?.amount ?? document.getElementById('payAmount')?.value),method=window._quickPay?.method ?? document.getElementById('payMethod')?.value;
+ if(!a||a<=0||!['cash','sinpe'].includes(method)){alert('Revise el monto recibido.');return}
+ window._payBusy=true;setLoading(true);
+ const reqId=payReqGet(id,a,method);
+ let res;
+ try{res=await sb.rpc('loans_register_payment_safe',{p_loan_id:id,p_amount:a,p_method:method,p_request_id:reqId})}
+ catch(e){res={error:{message:String(e&&e.message||e),code:''}}}
+ window._payBusy=false;setLoading(false);
+ if(res.error){
+  const code=res.error.code||'';
+  if(code==='P0001'){ // rechazo definitivo del servidor: no se registro nada
+   payReqClear(id,a,method);window._quickPay=null;
+   alert(res.error.message+(res.error.details?'\n'+res.error.details:''));
+   await loadAll();return;
+  }
+  // red cortada, tiempo de espera u otro: NO se sabe si se registro. Se conserva la referencia.
+  alert('No se pudo confirmar el cobro. Revise la conexión y presione "Registrar pago" otra vez: no se duplicará.');
+  return;
+ }
+ const r=Array.isArray(res.data)?res.data[0]:res.data;
+ if(!r||!r.payment_id){alert('Respuesta inesperada del servidor. No repita el cobro; avise al administrador.');return}
+ payReqClear(id,a,method);window._quickPay=null;
+ window._srvReceipts=window._srvReceipts||{};
+ window._srvReceipts[r.payment_id]={before:Number(r.balance_before),after:Number(r.balance_after),method:r.receipt_method};
+ // El cobro ya fue confirmado por el servidor. Un fallo secundario de auditoría
+ // o refresco nunca debe convertirlo en un aparente fallo del cobro.
+ try{await auditEvent('payment_recorded','payment',r.payment_id,null,{loan_id:id,amount:a,payment_method:method,request_id:reqId,balance_before:r.balance_before,balance_after:r.balance_after,already_registered:!!r.already_registered})}
+ catch(e){console.warn('Cobro confirmado; auditoría no disponible',e)}
+ try{await loadAll()}catch(e){console.warn('Cobro confirmado; refresco no disponible',e)}
+ if(r.loan_closed)alert('Crédito cancelado: saldo en ₡0.');
+ try{openPaymentReceipt(r.payment_id)}catch(e){alert('Cobro registrado correctamente. No vuelva a cobrar. Consulte el recibo desde el historial.');console.warn(e)}
+}
+// Conservar el mismo identificador de gasto si se pierde la respuesta del servidor.
+// No limpiar al cerrar el modal: el resultado de la operación podría ser incierto.
+const expensePendingKey='c24_v29_expense_pending';
+let pendingExpenseRequest=null;
+try{pendingExpenseRequest=JSON.parse(localStorage.getItem(expensePendingKey)||'null')}catch(e){pendingExpenseRequest=null}
+let expenseSaveBusy=false;
+function openExpense(){
+ const p=pendingExpenseRequest;
+ sheet.innerHTML=`<h3>Registrar gasto</h3>${p?'<p class="role-note">Hay un gasto pendiente de confirmación. Reintente con los mismos datos; no se creará otro gasto.</p>':''}<label>Concepto</label><input id="expenseConcept" placeholder="Ej. transporte"><label>Monto</label><input id="expenseAmount" type="number" placeholder="0"><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveExpense()">Guardar</button></div>`;
+ if(p){document.getElementById('expenseConcept').value=p.concept;document.getElementById('expenseAmount').value=p.amount}
+ modal.classList.add('show');
+}
+async function saveExpense(){
+ if(expenseSaveBusy)return;
+ const a=Number(expenseAmount.value),concept=expenseConcept.value.trim();
+ if(!Number.isFinite(a)||a<=0||!concept){alert('Indique concepto y monto válido.');return}
+ if(pendingExpenseRequest && (pendingExpenseRequest.amount!==a||pendingExpenseRequest.concept!==concept)){
+  alert('Hay un gasto pendiente de confirmación. Para evitar duplicaciones, conserve el concepto y monto originales o consulte al administrador.');return;
+ }
+ if(!pendingExpenseRequest){
+  pendingExpenseRequest={id:crypto.randomUUID(),amount:a,concept};
+  try{localStorage.setItem(expensePendingKey,JSON.stringify(pendingExpenseRequest))}
+  catch(e){pendingExpenseRequest=null;alert('No se pudo guardar la referencia del gasto. No se enviaron datos.');return}
+ }
+ expenseSaveBusy=true;setLoading(true);
+ try{
+  const {data,error}=await sb.rpc('loans_register_expense_safe',{p_concept:concept,p_amount:a,p_request_id:pendingExpenseRequest.id});
+  if(error)throw error;
+  if(!Array.isArray(data)||data.length!==1||!data[0].expense_id||!data[0].cash_movement_id)throw new Error('No se recibió confirmación completa del gasto.');
+  pendingExpenseRequest=null;
+  try{localStorage.removeItem(expensePendingKey)}catch(e){console.warn('No se pudo limpiar la referencia de gasto confirmado',e)}
+  closeModal();
+  try{await loadAll()}catch(refreshError){console.warn('Gasto confirmado; falló refresco',refreshError)}
+ }catch(err){alert('No se pudo confirmar el gasto. Puede reintentar sin cambiar concepto ni monto: se conservará la misma referencia para evitar duplicaciones. Detalle: '+(err.message||err));}
+ finally{expenseSaveBusy=false;setLoading(false)}
+}
 function openPhysicalCardImport(){
  const active=collectors.filter(c=>c.active);
  sheet.innerHTML=`<h3>↩️ Saldo inicial / migrar deuda anterior</h3>
@@ -1198,9 +1292,125 @@ async function savePhysicalCardImport(){
  closeModal();await loadAll();go('loans',document.querySelectorAll('.nav button')[1]);alert('Tarjeta migrada correctamente. Revise el saldo antes de continuar con cobros.');
 }
 
-function openNewLoan(){sheet.innerHTML=`<h3>Nuevo préstamo</h3><label>Cliente</label><select id="existingClient"><option value="">＋ Cliente nuevo</option>${clients.map(c=>`<option value="${c.id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select><label>Nombre del cliente nuevo</label><input id="newName" placeholder="Nombre completo"><label>Identificación (opcional)</label><input id="newIdentification" placeholder="Cédula / identificación"><label>Teléfono (opcional)</label><input id="newPhone" placeholder="8888-8888"><label>Dirección / referencia (opcional)</label><textarea id="newAddress" rows="2" placeholder="Dirección o punto de referencia"></textarea><label>Notas del cliente (opcional)</label><textarea id="newClientNotes" rows="2" placeholder="Información útil"></textarea><label>Monto entregado</label><input id="newPrincipal" type="number" placeholder="100000" oninput="calcNew()"><div class="row"><div><label>Interés</label><input value="20%" disabled></div><div><label>Total a cobrar</label><input id="newTotal" disabled></div></div><label>Modalidad / plazo del crédito</label><select id="newTerm"><option value="weekly">Semanal · 7 días efectivos</option><option value="fortnightly">Quincenal · 15 días efectivos</option><option value="days_24" selected>24 días efectivos</option><option value="days_30">30 días efectivos</option></select><div class="role-note">Los domingos no consumen días del plazo ni adelantan el vencimiento.</div><label>Frecuencia de cobro</label><select id="newFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select><label>Monto esperado por cobro</label><input id="newPayment" type="number" placeholder="5000"><label>Cobrador asignado</label><input value="Alex" disabled><input id="newCollector" type="hidden" value="${ALEX_COLLECTOR_ID}"><div class="role-note">Todos los créditos nuevos se asignan automáticamente a Alex. Los créditos históricos conservan su vencimiento original.</div><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveLoan()">Crear préstamo</button></div>`;modal.classList.add('show')}
+let pendingLoanRequest=null;
+function openNewLoan(){const sheet=document.getElementById('sheet');sheet.innerHTML=`<h3>Nuevo préstamo</h3><label>Cliente</label><select id="existingClient"><option value="">＋ Cliente nuevo</option>${clients.map(c=>`<option value="${c.id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select><label>Nombre del cliente nuevo</label><input id="newName" placeholder="Nombre completo"><label>Identificación (opcional)</label><input id="newIdentification" placeholder="Cédula / identificación"><label>Teléfono (opcional)</label><input id="newPhone" placeholder="8888-8888"><label>Dirección / referencia (opcional)</label><textarea id="newAddress" rows="2" placeholder="Dirección o punto de referencia"></textarea><label>Notas del cliente (opcional)</label><textarea id="newClientNotes" rows="2" placeholder="Información útil"></textarea><label>Monto entregado</label><input id="newPrincipal" type="number" placeholder="100000" oninput="calcNew()"><div class="row"><div><label>Interés</label><input value="20%" disabled></div><div><label>Total a cobrar</label><input id="newTotal" disabled></div></div><label>Modalidad / plazo del crédito</label><select id="newTerm"><option value="weekly">Semanal · 7 días efectivos</option><option value="fortnightly">Quincenal · 15 días efectivos</option><option value="days_24" selected>24 días efectivos</option><option value="days_30">30 días efectivos</option></select><div class="role-note">Los domingos no consumen días del plazo ni adelantan el vencimiento.</div><label>Frecuencia de cobro</label><select id="newFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select><label>Monto esperado por cobro</label><input id="newPayment" type="number" placeholder="5000"><label>Cobrador asignado (solo TEST)</label><select id="newCollector">${collectors.filter(c=>c.active).map(c=>`<option value="${c.user_id}">${c.full_name}</option>`).join('')}</select><div class="role-note">Modo de pruebas: elija un cobrador activo. En producción se debe validar y configurar la asignación definitiva a Alex antes de publicar.</div><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveLoan()">Crear préstamo</button></div>`;modal.classList.add('show');
+ // Recuperar el formulario original después de recargar la pestaña.
+ // No borrar ni alterar el identificador de operación pendiente.
+ const saved=readPendingLoan();
+ if(saved){
+  let d;
+  try{d=JSON.parse(saved.fingerprint)}catch(e){d=null}
+  if(d && typeof d==='object' && d.startDate && d.termCode){
+   const values={existingClient:d.clientIdSelected||'',newName:d.name||'',
+    newIdentification:d.identification||'',newPhone:d.phone||'',
+    newAddress:d.address||'',newClientNotes:d.notes||'',
+    newPrincipal:d.p,newTerm:d.termCode,newFreq:d.frequency,newPayment:d.pay,newCollector:d.collectorId};
+   for(const [id,value] of Object.entries(values)){
+    const el=document.getElementById(id);
+    if(el && value!==undefined && value!==null)el.value=String(value);
+   }
+   calcNew();
+   const note=document.createElement('p');
+   note.className='role-note';
+   note.textContent='Operación pendiente recuperada. Verifique los datos y pulse Crear préstamo para confirmar o reintentar la misma solicitud. No cambie los datos antes de confirmar.';
+   sheet.prepend(note);
+  }else{
+   const note=document.createElement('p');note.className='role-note';
+   note.textContent='Hay una operación pendiente con datos no recuperables. No registre otro préstamo hasta verificarla.';
+   sheet.prepend(note);
+  }
+ }
+}
+function readPendingLoan(){
+ try{
+  const raw=sessionStorage.getItem('cartera24_v29_pending_loan');
+  if(!raw)return null;
+  const obj=JSON.parse(raw);
+  if(!obj || typeof obj.id!=='string' || typeof obj.fingerprint!=='string')return null;
+  return obj;
+ }catch(e){return null}
+}
 function calcNew(){newTotal.value=money(Number(newPrincipal.value||0)*1.2)}
-async function saveLoan(){let p=Number(newPrincipal.value),pay=Number(newPayment.value),clientId=existingClient.value;const terms={weekly:7,fortnightly:15,days_24:24,days_30:30},termCode=newTerm.value,termDays=terms[termCode],startDate=todayISO(),dueDate=addEffectiveDays(startDate,termDays);if(!p||!pay||!termDays){alert('Complete monto, plazo y cobro esperado.');return}const existing=clients.find(c=>c.id===clientId);const mm=morosoMatch(existing?.full_name||newName.value,existing?.phone||newPhone.value);if(mm){alert('⚠️ CLIENTE MOROSO\n\n'+mm.full_name+' mantiene una deuda morosa de '+money(mm.opening_balance)+'.\n\nNo se creará un crédito normal. Iker debe revisar y autorizar un acuerdo especial.');return}setLoading(true);if(!clientId){let name=newName.value.trim();if(!name){setLoading(false);alert('Indique el cliente.');return}const {data:c,error}=await sb.from('loans_clients').insert({full_name:name,identification:newIdentification.value.trim()||null,phone:newPhone.value.trim()||null,address:newAddress.value.trim()||null,notes:newClientNotes.value.trim()||null}).select().single();if(error){setLoading(false);alert(error.message);return}clientId=c.id}const collectorId=ALEX_COLLECTOR_ID;const collector=collectors.find(c=>c.user_id===collectorId)||{user_id:ALEX_COLLECTOR_ID,full_name:ALEX_COLLECTOR_NAME};const {data:l,error}=await sb.from('loans_loans').insert({client_id:clientId,principal:p,interest_rate:20,term_days:termDays,credit_term_code:termCode,effective_term_days:termDays,start_date:startDate,due_date:dueDate,collection_frequency:newFreq.value,expected_payment:pay,collector_id:collectorId,collector_name_snapshot:collector?.full_name||null,created_by:session.user.id}).select().single();if(error){setLoading(false);alert('No se pudo crear el crédito. Confirme que la migración V22 esté aplicada: '+error.message);return}await auditEvent('loan_created','loan',l.id,null,{principal:p,interest_rate:20,client_id:clientId,credit_term_code:termCode,effective_term_days:termDays,due_date:dueDate});if(collectorId)await sb.from('loans_collector_history').insert({loan_id:l.id,collector_id:collectorId,collector_name:collector.full_name,assigned_by:session.user.id});await sb.from('loans_cash_movements').insert({movement_type:'loan_disbursement',amount:-p,loan_id:l.id,created_by:session.user.id});closeModal();await loadAll();setLoading(false);go('loans',document.querySelectorAll('.nav button')[1])}
+async function saveLoan(){
+ if(window._loanSaveBusy)return;
+ const p=Number(newPrincipal.value),pay=Number(newPayment.value),clientIdSelected=existingClient.value;
+ const terms={weekly:7,fortnightly:15,days_24:24,days_30:30},termCode=newTerm.value,termDays=terms[termCode];
+ // Reintentar con las fechas originales aunque haya cambiado el día.
+ const recovered=readPendingLoan();
+ let recoveredDetails=null;
+ if(recovered){try{recoveredDetails=JSON.parse(recovered.fingerprint)}catch(e){}}
+ const startDate=recoveredDetails?.startDate||todayISO(),dueDate=addEffectiveDays(startDate,termDays);
+ if(!Number.isFinite(p)||p<=0||!Number.isFinite(pay)||pay<=0||!termDays){alert('Complete monto, plazo y cobro esperado.');return}
+ if(!collectors.some(c=>c.user_id===newCollector.value && c.active)){alert('Seleccione un cobrador activo de pruebas antes de crear el préstamo.');return}
+ const existing=clients.find(c=>c.id===clientIdSelected);
+ const mm=morosoMatch(existing?.full_name||newName.value,existing?.phone||newPhone.value);
+ if(mm){alert('⚠️ CLIENTE MOROSO\n\n'+mm.full_name+' mantiene una deuda morosa de '+money(mm.opening_balance)+'.\n\nIker debe revisar y autorizar un acuerdo especial.');return}
+ const details={p, pay,clientIdSelected,collectorId:newCollector.value,termCode,termDays,startDate,dueDate,frequency:newFreq.value,
+  name:newName.value.trim(),identification:newIdentification.value.trim(),phone:newPhone.value.trim(),
+  address:newAddress.value.trim(),notes:newClientNotes.value.trim()};
+ const fingerprint=JSON.stringify(details);
+ // Guardar referencia y datos en sessionStorage para sobrevivir a una pérdida de conexión
+ // o un refresco de la pestaña. No se almacena ninguna credencial.
+ const storageKey='cartera24_v29_pending_loan';
+ if(!pendingLoanRequest)pendingLoanRequest=readPendingLoan();
+ if(pendingLoanRequest && pendingLoanRequest.fingerprint!==fingerprint){
+  alert('Existe un préstamo pendiente de confirmación con otros datos. No cree otro crédito hasta verificar el anterior.');return;
+ }
+ if(!pendingLoanRequest){pendingLoanRequest={id:crypto.randomUUID(),fingerprint,clientId:clientIdSelected||null};
+  try{sessionStorage.setItem(storageKey,JSON.stringify(pendingLoanRequest))}catch(e){pendingLoanRequest=null;alert('No se pudo guardar la referencia de seguridad. No se envió el préstamo.');return}
+ }
+ window._loanSaveBusy=true;setLoading(true);
+ try{
+  let clientId=pendingLoanRequest.clientId;
+  if(!clientId){
+   if(!details.name){alert('Indique el cliente.');return}
+   // Reservar el ID ANTES de enviar el INSERT: una respuesta perdida no crea otro cliente.
+   if(!pendingLoanRequest.newClientId){
+    pendingLoanRequest.newClientId=crypto.randomUUID();
+    try{sessionStorage.setItem(storageKey,JSON.stringify(pendingLoanRequest))}catch(e){throw new Error('No se pudo conservar la referencia del cliente. No se enviaron datos. '+e.message)}
+   }
+   const candidateId=pendingLoanRequest.newClientId;
+   const clientPayload={id:candidateId,full_name:details.name,identification:details.identification||null,
+    phone:details.phone||null,address:details.address||null,notes:details.notes||null};
+   const {error:insertError}=await sb.from('loans_clients').insert(clientPayload);
+   if(insertError && insertError.code!=='23505'){
+    // Si se perdió la respuesta, consultar el mismo ID antes de asumir un fallo.
+    const {data:confirmed}=await sb.from('loans_clients').select('id,full_name,identification,phone,address,notes').eq('id',candidateId).maybeSingle();
+    if(!confirmed)throw insertError;
+   }
+   // Un conflicto de clave solo es aceptable si corresponde exactamente al cliente esperado.
+   const {data:confirmed,error:lookupError}=await sb.from('loans_clients')
+    .select('id,full_name,identification,phone,address,notes').eq('id',candidateId).single();
+   if(lookupError)throw lookupError;
+   if(confirmed.full_name!==clientPayload.full_name ||
+      (confirmed.identification||null)!==clientPayload.identification ||
+      (confirmed.phone||null)!==clientPayload.phone ||
+      (confirmed.address||null)!==clientPayload.address ||
+      (confirmed.notes||null)!==clientPayload.notes){
+    throw new Error('El identificador del cliente ya existe con datos diferentes. Se detuvo la operación.');
+   }
+   clientId=confirmed.id;pendingLoanRequest.clientId=clientId;
+   try{sessionStorage.setItem(storageKey,JSON.stringify(pendingLoanRequest))}catch(e){console.warn('No se pudo conservar el cliente del reintento',e)}
+  }
+  const collectorId=details.collectorId;
+  const collector=collectors.find(c=>c.user_id===collectorId && c.active);
+  if(!collector){throw new Error('El cobrador seleccionado no está activo en este entorno.');}
+  const requestId=pendingLoanRequest.id;
+  const {data,error}=await sb.rpc('loans_create_with_disbursement_safe',{
+   p_request_id:requestId,p_client_id:clientId,p_principal:p,p_term_days:termDays,p_term_code:termCode,
+   p_start_date:startDate,p_due_date:dueDate,p_frequency:details.frequency,p_expected_payment:pay,
+   p_collector_id:collectorId,p_collector_name:collector.full_name
+  });
+  if(error)throw error;
+  const loanId=Array.isArray(data)?data[0]?.loan_id:data?.loan_id;
+  if(!loanId)throw new Error('No se recibió confirmación del identificador del préstamo');
+  pendingLoanRequest=null;try{sessionStorage.removeItem(storageKey)}catch(e){}
+  try{await auditEvent('loan_created','loan',loanId,null,{principal:p,client_id:clientId,request_id:requestId})}catch(e){console.warn('Auditoría no disponible',e)}
+  closeModal();try{await loadAll()}catch(e){console.warn('Refresco pendiente',e)}
+  go('loans',document.querySelectorAll('.nav button')[1]);
+ }catch(error){alert('No se pudo confirmar el préstamo y su desembolso. Puede reintentar SIN cambiar los datos; se conservará la misma referencia. Detalle: '+error.message)}
+ finally{window._loanSaveBusy=false;setLoading(false)}
+}
 function openCapital(){sheet.innerHTML=`<h3>Inyectar capital</h3><p class="sub">Registra únicamente dinero nuevo que Iker aporta al negocio. Aumenta el saldo disponible para prestar, sin contarlo como cobro ni como ganancia. No sirve para corregir diferencias de caja.</p><input id="capitalType" type="hidden" value="additional"><label>Monto aportado (₡)</label><input id="capitalAmount" type="number" min="1" step="1" placeholder="Ej. 300000"><label>Fecha del aporte</label><input id="capitalDate" type="date" value="${todayISO()}"><label>Origen / motivo (recomendado)</label><input id="capitalNotes" placeholder="Ej. Aporte personal de emergencia"><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveCapital()">Confirmar aporte</button></div>`;modal.classList.add('show')}
 async function saveCapital(){const amount=Number(capitalAmount.value||0),type=capitalType.value,date=capitalDate.value||todayISO(),notes=capitalNotes.value.trim();if(!Number.isFinite(amount)||amount<=0||!Number.isInteger(amount)){alert('Indique un monto positivo en colones enteros.');return}if(date>todayISO()){alert('La fecha del aporte no puede ser futura.');return}if(!confirm('¿Confirmar aporte real de '+money(amount)+' al capital del negocio? Esto aumentará el disponible de caja.'))return;setLoading(true);const {error}=await sb.rpc('loans_register_capital',{p_amount:amount,p_type:type,p_date:date,p_notes:notes||null});setLoading(false);if(error){alert('No se pudo registrar el capital: '+error.message);return}closeModal();await loadAll();alert(type==='initial'?'Capital inicial registrado.':'Aporte de capital registrado.')}
 function openNewCollector(){sheet.innerHTML=`<h3>Agregar cobrador</h3><p class="sub">Iker crea el acceso directamente. No se envía correo de confirmación.</p><label>Nombre completo</label><input id="collectorName" autocomplete="off"><label>Correo / usuario</label><input id="collectorEmail" type="email" autocomplete="off"><label>Contraseña temporal</label><input id="collectorPassword" type="password" minlength="8" autocomplete="new-password"><div class="role-note">Mínimo 8 caracteres. Compártala con el cobrador por un medio privado.</div><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="createCollector()">Crear acceso</button></div>`;modal.classList.add('show')}
@@ -1220,7 +1430,7 @@ async function assignLoanToCollector(loanId,collectorId){const c=collectors.find
 async function reassignLoan(loanId){const el=document.getElementById('re_'+loanId),to=el?.value;if(!to){alert('Seleccione el nuevo cobrador.');return}setLoading(true);const {error}=await sb.rpc('loans_assign_collector',{p_loan_id:loanId,p_collector_id:to});setLoading(false);if(error){alert(error.message);return}await loadAll();openReassignCollector(to);alert('Cartera reasignada correctamente.')}
 function openDetail(id){let l=loans.find(x=>x.id===id),c=clientFor(l.client_id),cy=cycleFor(id),ps=payments.filter(p=>p.loan_id===id);sheet.innerHTML=`<h3>${c.full_name}</h3>${l.source_type==='physical_card'?'<span class="pill">MIGRADO DE TARJETA</span>':'<span class="pill">TARJETA DIGITAL</span>'}<div class="grid"><div><small class="sub">Prestado</small><div class="balance">${money(l.principal)}</div></div><div><small class="sub">Total ciclo</small><div class="balance">${money(cy?.amount_due)}</div></div></div><div class="card"><div class="receipt-line"><span>Modalidad</span><b>${termLabel(l)}</b></div><div class="receipt-line"><span>Ciclo</span><b>${cy?.cycle_number||1}</b></div><div class="receipt-line"><span>Inicio</span><b>${fmtDate(cy?.start_date)}</b></div><div class="receipt-line"><span>Vence</span><b>${fmtDate(cy?.due_date)}</b></div><div class="receipt-line"><span>Saldo</span><b>${money(balanceForLoan(id))}</b></div>${l.collector_name_snapshot?`<div class="receipt-line"><span>Cobrador</span><b>${l.collector_name_snapshot}</b></div>`:''}</div><h4>Abonos</h4>${ps.length?ps.map(p=>`<div class="receipt-line"><span>${fmtDate(p.payment_date)}</span><b>${money(p.amount)}</b></div>`).join(''):'<div class="sub">Sin abonos.</div>'}<button class="secondary big" style="margin-top:12px" onclick="closeModal()">Cerrar</button>`;modal.classList.add('show')}
 function simulateRefi(id){let l=loans.find(x=>x.id===id),cy=cycleFor(id),bal=balanceForLoan(id),nt=bal*1.2,can=isCycleDue(cy);sheet.innerHTML=`<h3>Refinanciamiento</h3><p class="sub">El nuevo ciclo se calcula únicamente sobre el saldo pendiente.</p><div class="hero"><small>Saldo pendiente</small><div class="money">${money(bal)}</div></div><div class="card" style="margin-top:10px"><div class="receipt-line"><span>Nuevo capital</span><b>${money(bal)}</b></div><div class="receipt-line"><span>20%</span><b>${money(bal*.2)}</b></div><div class="receipt-line"><span>Nuevo total</span><b>${money(nt)}</b></div><div class="receipt-line"><span>Nuevo plazo</span><b>${termLabel(l)}</b></div></div>${can?`<button class="primary big" style="margin-top:10px" onclick="confirmRefi('${id}')">Confirmar nuevo ciclo</button>`:`<div class="sub" style="margin-top:12px">Disponible a partir del vencimiento: ${fmtDate(cy.due_date)}.</div>`}<button class="secondary big" style="margin-top:8px" onclick="closeModal()">Cerrar</button>`;modal.classList.add('show')}
-async function confirmRefi(id){if(!confirm('¿Crear el nuevo ciclo con 20% sobre el saldo pendiente?'))return;setLoading(true);const {error}=await sb.rpc('loans_refinance_cycle',{p_loan_id:id});setLoading(false);if(error){alert(error.message);return}closeModal();await loadAll()}
+async function confirmRefi(id){if(window._refiBusy)return;if(!confirm('¿Crear el nuevo ciclo con 20% sobre el saldo pendiente?'))return;window._refiBusy=true;setLoading(true);let error;try{({error}=await sb.rpc('loans_refinance_cycle',{p_loan_id:id}))}catch(e){error={message:String(e&&e.message||e)}}window._refiBusy=false;setLoading(false);if(error){alert(error.message);await loadAll();return}closeModal();await loadAll()}
 function go(id,btn){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');window.scrollTo(0,0)}
 function closeModal(){modal.classList.remove('show')}
 init();
