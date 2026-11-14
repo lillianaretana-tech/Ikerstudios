@@ -668,12 +668,9 @@ function openClientFile(id){
   <div class="stat"><small>Saldo pendiente</small><b>${money(bal)}</b></div>
   <div class="stat"><small>Créditos</small><b>${ls.length}</b></div>
  </div>
- <h4 style="margin-bottom:6px">Créditos</h4>
- ${ls.length?ls.map(l=>`<div class="card"><div class="section-title" style="margin:0"><div><b>${fmtDate(l.start_date)}</b><div class="sub">${loanCycleLabel(l)} · Saldo ${money(balanceForLoan(l.id))}</div></div><button class="secondary" onclick="openLoanHistory('${l.id}')">Ver historial</button></div></div>`).join(''):'<div class="empty">Este cliente todavía no tiene créditos.</div>'}
- <h4 style="margin-bottom:6px">Historial de cobros</h4>
- <div class="sub" style="margin-bottom:8px">Los días sin pago se identifican automáticamente según el calendario del crédito. No significan que Alex haya visitado al cliente. No se incluyen domingos.</div>
- ${clientCollectionHistory(ls,ps).map(e=>`<div class="receipt-line"><span>${weekdayDate(e.day)}${ls.length>1?` <small class="sub">· Crédito ${fmtDate(e.loan.start_date)}</small>`:''}</span><b style="${e.missed?'color:#ad432d':''}">${e.missed?'No registró pago':money(e.paid)}</b></div>`).join('')||'<div class="sub">Sin movimientos ni fechas pendientes recientes.</div>'}
- ${ls.some(l=>l.collection_frequency==='custom')?'<div class="sub">Los cobros personalizados solo muestran pagos registrados; requieren un calendario definido para señalar ausencias.</div>':''}
+ <h4 style="margin-bottom:6px">Créditos activos</h4>
+ ${ls.filter(l=>['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0).map(l=>`<div class="card" style="margin-top:8px"><div class="section-title" style="margin:0"><div><b>Crédito #${loanShortCode(l)} · ${fmtDate(l.start_date)}</b><div class="sub">${loanCycleLabel(l)} · Saldo ${money(balanceForLoan(l.id))}</div></div></div><div class="actions"><button class="secondary" onclick="openLoanHistory('${l.id}')">Ver historial / estado</button></div></div>`).join('')||'<div class="empty">No hay créditos activos.</div>'}
+ ${ls.some(l=>!['active','refinanced'].includes(l.status)||balanceForLoan(l.id)<=0)?`<details style="margin-top:10px"><summary class="sub" style="cursor:pointer">Consultar créditos pagados / anteriores</summary>${ls.filter(l=>!['active','refinanced'].includes(l.status)||balanceForLoan(l.id)<=0).map(l=>`<div class="card" style="margin-top:8px"><b>Crédito #${loanShortCode(l)} · ${fmtDate(l.start_date)}</b><div class="sub">Pagado / anterior · Saldo ${money(balanceForLoan(l.id))}</div><button class="secondary" onclick="openLoanHistory('${l.id}')">Ver historial</button></div>`).join('')}</details>`:''}
  <div class="actions" style="margin-top:14px">${['owner','admin'].includes(role)?`<button class="primary" onclick="editClient('${c.id}')">Editar cliente</button>`:''}<button class="secondary" onclick="closeModal()">Cerrar</button></div>`;
  modal.classList.add('show');
 }
@@ -1028,13 +1025,17 @@ function renderAdmin(){if(!['owner','admin','technical_support','collector'].inc
 function renderCollectors(){if(!collectorList)return;collectorList.innerHTML=collectors.map(c=>{let n=loans.filter(l=>l.collector_id===c.user_id&&balanceForLoan(l.id)>0).length;return `<div class="collector-row"><div class="avatar">${(c.full_name||'?')[0]}</div><div class="info"><b>${c.full_name}</b><small>${c.active?'Activo':'Inactivo'} · ${n} crédito(s)</small></div><div class="collector-actions">${c.active?`<button class="secondary" onclick="openReassignCollector('${c.user_id}')">Cartera</button><button class="danger" onclick="deactivateCollector('${c.user_id}')">Desactivar</button>`:'<span class="pill">INACTIVO</span>'}</div></div>`}).join('')||'<div class="empty">Todavía no hay cobradores.</div>'}
 function freqLabel(v){return ({daily:'Diario',weekly:'Semanal',custom:'Personalizado'})[v]||v}
 
+function loanShortCode(l){return String(l.id||'').slice(0,8).toUpperCase()}
 function openLoanHistory(id){
  const l=loans.find(x=>x.id===id),c=clientFor(l.client_id),list=cycles.filter(x=>x.loan_id===id).sort((a,b)=>Number(a.cycle_number)-Number(b.cycle_number));
  const ps=payments.filter(p=>p.loan_id===id).sort((a,b)=>String(b.payment_date).localeCompare(String(a.payment_date)));
  sheet.innerHTML=`<h3>${c.full_name}</h3><div class="sub">Historial del crédito</div>
  ${l.source_type==='physical_card'?`<span class="pill" style="margin-top:8px">MIGRADO DE TARJETA</span>`:''}
   ${list.map(cy=>{const paid=cyclePaid(cy.id),rem=Math.max(0,Number(cy.amount_due)-paid);return `<div class="card" style="margin-top:10px"><b>Ciclo ${cy.cycle_number}</b><div class="sub">${termLabel(l)} · ${fmtDate(cy.start_date)} → ${fmtDate(cy.due_date)}</div><div style="margin-top:6px">Base: <b>${money(cy.opening_principal)}</b> · Interés: <b>${Number(cy.interest_rate)}%</b></div><div>Total ciclo: <b>${money(cy.amount_due)}</b> · Pagado: <b>${money(paid)}</b> · Saldo: <b>${money(rem)}</b></div><div class="sub">Estado: ${cy.status==='active'?'Activo':cy.status==='refinanced'?'Refinanciado':'Pagado'}</div></div>`}).join('')}
- <h4 style="margin-bottom:6px">Abonos</h4>
+ <h4 style="margin-bottom:6px">Historial de cobros de este crédito</h4>
+ <div class="sub">Crédito #${loanShortCode(l)} · Inicio ${fmtDate(l.start_date)}. Los días sin pago son estimaciones del calendario, no visitas confirmadas.</div>
+ ${clientCollectionHistory([l],ps).map(e=>`<div class="receipt-line"><span>${weekdayDate(e.day)}</span><b style="${e.missed?'color:#ad432d':''}">${e.missed?'No registró pago':money(e.paid)}</b></div>`).join('')||'<div class="sub">Sin movimientos recientes.</div>'}
+ <h4 style="margin-bottom:6px">Comprobantes de abonos</h4>
  ${ps.length?ps.map(p=>`<div class="card" style="margin-top:8px"><div class="receipt-line"><span>${fmtDate(p.payment_date)} · ${p.payment_method==='sinpe'?'SINPE':'Efectivo'}</span><b>${money(p.amount)}</b></div><button class="secondary big" style="margin-top:6px" onclick="openPaymentReceipt('${p.id}')">Ver / compartir recibo</button></div>`).join(''):'<div class="sub">Sin abonos registrados.</div>'}
  <div class="actions"><button class="secondary" onclick="closeModal()">Cerrar</button></div>`;
  modal.classList.add('show');
