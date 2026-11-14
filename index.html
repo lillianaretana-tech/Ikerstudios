@@ -506,8 +506,8 @@ function renderClients(){
  let q=(document.getElementById('search')?.value||'').trim().toLowerCase();
  let list=clients.filter(c=>loans.some(l=>l.client_id===c.id&&['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0)).filter(c=>[c.client_number,c.first_name,c.last_name,c.nickname,c.phone,c.full_name].some(v=>String(v||'').toLowerCase().includes(q)));
  clientList.innerHTML=list.map(c=>{
-   let ls=loans.filter(l=>l.client_id===c.id),bal=ls.reduce((s,l)=>s+balanceForLoan(l.id),0);
-   const nm=clientDisplayName(c); return `<div class="card person"><div class="avatar">${(c.first_name||c.full_name||'?')[0]}</div><div class="info"><b>#${c.client_number||'—'} · ${nm}</b><small>${c.nickname&&nm!==c.nickname?`Apodo: ${c.nickname} · `:''}${c.phone?`${c.phone} · `:''}Saldo ${money(bal)}</small></div><button class="secondary" onclick="openClientFile('${c.id}')">Expediente</button></div>`;
+   let ls=loans.filter(l=>l.client_id===c.id&&['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0),bal=ls.reduce((sum,l)=>sum+balanceForLoan(l.id),0);
+   const nm=clientDisplayName(c); return `<div class="card person"><div class="avatar">${(c.first_name||c.full_name||'?')[0]}</div><div class="info"><b>#${c.client_number||'—'} · ${nm}</b><small>${c.nickname&&nm!==c.nickname?`Apodo: ${c.nickname} · `:''}${c.phone?`${c.phone} · `:''}${ls.length===1?'Saldo '+money(bal):ls.length+' créditos pendientes · Total '+money(bal)+' · '+ls.map(l=>fmtDate(l.start_date)+': '+money(balanceForLoan(l.id))).join(' / ')}</small></div><button class="secondary" onclick="openClientFile('${c.id}')">Expediente</button></div>`;
  }).join('')||'<div class="empty">No hay clientes con crédito vigente.</div>';
 }
 
