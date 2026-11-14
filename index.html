@@ -133,7 +133,7 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
 
 <section id="loans" class="view">
  <div class="owner-only" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-  <button class="primary big" onclick="openNewLoan()">＋ Nuevo préstamo</button>
+  <button class="primary big" onclick="openNewLoan()">＋ Nuevo préstamo</button><button class="secondary big" onclick="exportAllLoanStatementsExcel()">⬇ Excel de toda la cartera</button>
   <button class="secondary big" onclick="openPhysicalCardImport()">↩️ Saldo inicial / migrar deuda anterior</button>
  </div>
  <div class="section-title"><h2>Créditos activos</h2><span class="sub" id="loanCount"></span></div>
@@ -822,6 +822,27 @@ function renderReport(){
     <div class="stat"><small>Refinanciados del período</small><b>${r.refinancedInPeriod}</b></div>
    </div>
  </div>`;
+}
+function exportAllLoanStatementsExcel(){
+ if(typeof XLSX==='undefined'){alert('No se pudo cargar el generador de Excel.');return}
+ const wb=XLSX.utils.book_new();
+ const headers=['Cliente N°','Cliente','ID crédito','Inicio','Vencimiento','Principal','Total a cobrar','Total pagado','Saldo','Estado registrado','Observación','Teléfono','Identificación'];
+ const rows=[headers],paymentsRows=[['Cliente N°','Cliente','ID crédito','Fecha de pago','Monto','Medio','ID pago']];
+ const counts={};
+ loans.forEach(l=>{if(balanceForLoan(l.id)>0)counts[l.client_id]=(counts[l.client_id]||0)+1});
+ loans.forEach(l=>{
+  const c=clientFor(l.client_id),ps=payments.filter(p=>p.loan_id===l.id),due=cycles.filter(x=>x.loan_id===l.id).reduce((n,x)=>n+Number(x.amount_due||0),0),paid=ps.reduce((n,p)=>n+Number(p.amount||0),0),balance=due-paid;
+  const note=balance<=0&&l.status==='active'?'Saldo cero, estado activo':balance>0&&counts[l.client_id]>1?'Varios créditos pendientes':'';
+  rows.push([c.client_number||'',clientDisplayName(c),l.id,l.start_date,l.due_date,Number(l.principal||0),due,paid,balance,l.status,note,c.phone||'',c.identification||'']);
+  ps.forEach(p=>paymentsRows.push([c.client_number||'',clientDisplayName(c),l.id,p.payment_date,Number(p.amount||0),p.payment_method||'',p.id]));
+ });
+ const alerts=[headers,...rows.slice(1).filter(r=>r[10])];
+ for(const [name,data] of [['Todos los créditos',rows],['Todos los pagos',paymentsRows],['Alertas',alerts]]){
+  const ws=XLSX.utils.aoa_to_sheet(data);ws['!cols']=data[0].map((_,i)=>({wch:i===2||i===6?39:23}));
+  ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:data.length-1,c:data[0].length-1}})};
+  XLSX.utils.book_append_sheet(wb,ws,name);
+ }
+ XLSX.writeFile(wb,'Cartera24_Cartera_Completa_'+todayISO()+'.xlsx');
 }
 function exportReportExcel(){
  if(typeof XLSX==='undefined'){alert('No se pudo cargar el generador de Excel. Comprueba la conexión a internet e inténtalo de nuevo.');return}
