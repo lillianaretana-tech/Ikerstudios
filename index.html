@@ -133,11 +133,13 @@ footer{text-align:center;color:#9b8d83;font-size:11px;padding:20px 8px}
 
 <section id="loans" class="view">
  <div class="owner-only" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-  <button class="primary big" onclick="openNewLoan()">＋ Nuevo préstamo</button><button class="secondary big" onclick="exportAllLoanStatementsExcel()">⬇ Excel de toda la cartera</button>
+  <button class="primary big" onclick="openNewLoan()">＋ Nuevo préstamo</button>
   <button class="secondary big" onclick="openPhysicalCardImport()">↩️ Saldo inicial / migrar deuda anterior</button>
  </div>
  <div class="section-title"><h2>Créditos activos</h2><span class="sub" id="loanCount"></span></div>
+ <input id="loanSearch" placeholder="Buscar crédito por cliente, número, teléfono o cédula…" oninput="renderLoans()" autocomplete="off" style="margin-bottom:12px">
  <div id="loanList"></div>
+ <div class="owner-only" style="margin-top:24px"><button class="secondary big" onclick="exportAllLoanStatementsExcel()">⬇ Excel de toda la cartera</button></div>
 </section>
 
 <section id="clients" class="view">
@@ -488,7 +490,8 @@ function isCycleDue(c){return c&&creditTodayISO()>=String(c.due_date).slice(0,10
 function isCycleOverdue(c){return c&&creditTodayISO()>String(c.due_date).slice(0,10)}
 function loanCycleLabel(l){const c=activeCycleForLoan(l.id);return c?`Ciclo ${c.cycle_number} · ${termLabel(l)} · vence ${fmtDate(c.due_date)}`:'Sin ciclo activo'}
 function renderLoans(){
- const active=loans.filter(l=>['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0);
+ const q=(document.getElementById('loanSearch')?.value||'').trim().toLocaleLowerCase();
+ const active=loans.filter(l=>['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0).filter(l=>{const c=clientFor(l.client_id);return !q||[c.full_name,c.first_name,c.last_name,c.nickname,c.client_number,c.phone,c.identification,l.id].some(v=>String(v||'').toLocaleLowerCase().includes(q))});
  loanList.innerHTML=active.map(l=>{
     const c=clientFor(l.client_id),bal=balanceForLoan(l.id),cy=activeCycleForLoan(l.id),due=cy&&isCycleOverdue(cy)&&cycleRemaining(cy)>0;
    return `<div class="card">
