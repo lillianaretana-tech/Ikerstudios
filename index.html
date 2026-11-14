@@ -1309,7 +1309,7 @@ async function savePhysicalCardImport(){
 }
 
 let pendingLoanRequest=null;
-function openNewLoan(){const sheet=document.getElementById('sheet');sheet.innerHTML=`<h3>Nuevo préstamo</h3><label>Cliente</label><select id="existingClient"><option value="">＋ Cliente nuevo</option>${clients.map(c=>`<option value="${c.id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select><label>Nombre del cliente nuevo</label><input id="newName" placeholder="Nombre completo"><label>Identificación (opcional)</label><input id="newIdentification" placeholder="Cédula / identificación"><label>Teléfono (opcional)</label><input id="newPhone" placeholder="8888-8888"><label>Dirección / referencia (opcional)</label><textarea id="newAddress" rows="2" placeholder="Dirección o punto de referencia"></textarea><label>Notas del cliente (opcional)</label><textarea id="newClientNotes" rows="2" placeholder="Información útil"></textarea><label>Monto entregado</label><input id="newPrincipal" type="number" placeholder="100000" oninput="calcNew()"><div class="row"><div><label>Interés</label><input value="20%" disabled></div><div><label>Total a cobrar</label><input id="newTotal" disabled></div></div><label>Modalidad / plazo del crédito</label><select id="newTerm"><option value="weekly">Semanal · 7 días efectivos</option><option value="fortnightly">Quincenal · 15 días efectivos</option><option value="days_24" selected>24 días efectivos</option><option value="days_30">30 días efectivos</option></select><div class="role-note">Los domingos no consumen días del plazo ni adelantan el vencimiento.</div><label>Frecuencia de cobro</label><select id="newFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select><label>Monto esperado por cobro</label><input id="newPayment" type="number" placeholder="5000"><label>Cobrador asignado (solo TEST)</label><select id="newCollector">${collectors.filter(c=>c.active).map(c=>`<option value="${c.user_id}">${c.full_name}</option>`).join('')}</select><div class="role-note">Modo de pruebas: elija un cobrador activo. En producción se debe validar y configurar la asignación definitiva a Alex antes de publicar.</div><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveLoan()">Crear préstamo</button></div>`;modal.classList.add('show');
+function openNewLoan(){const sheet=document.getElementById('sheet');sheet.innerHTML=`<h3>Nuevo préstamo</h3><label>Cliente</label><select id="existingClient" onchange="updateExistingLoanClient()"><option value="">＋ Cliente nuevo</option>${clients.map(c=>`<option value="${c.id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select><div id="existingLoanClientInfo" class="card" style="display:none;margin-top:10px"></div><div id="newLoanClientFields"><label>Nombre del cliente nuevo</label><input id="newName" placeholder="Nombre completo"><label>Identificación (opcional)</label><input id="newIdentification" placeholder="Cédula / identificación"><label>Teléfono (opcional)</label><input id="newPhone" placeholder="8888-8888"><label>Dirección / referencia (opcional)</label><textarea id="newAddress" rows="2" placeholder="Dirección o punto de referencia"></textarea><label>Notas del cliente (opcional)</label><textarea id="newClientNotes" rows="2" placeholder="Información útil"></textarea></div><label>Monto entregado</label><input id="newPrincipal" type="number" placeholder="100000" oninput="calcNew()"><div class="row"><div><label>Interés</label><input value="20%" disabled></div><div><label>Total a cobrar</label><input id="newTotal" disabled></div></div><label>Modalidad / plazo del crédito</label><select id="newTerm"><option value="weekly">Semanal · 7 días efectivos</option><option value="fortnightly">Quincenal · 15 días efectivos</option><option value="days_24" selected>24 días efectivos</option><option value="days_30">30 días efectivos</option></select><div class="role-note">Los domingos no consumen días del plazo ni adelantan el vencimiento.</div><label>Frecuencia de cobro</label><select id="newFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select><label>Monto esperado por cobro</label><input id="newPayment" type="number" placeholder="5000"><label>Cobrador asignado (solo TEST)</label><select id="newCollector">${collectors.filter(c=>c.active).map(c=>`<option value="${c.user_id}">${c.full_name}</option>`).join('')}</select><div class="role-note">Modo de pruebas: elija un cobrador activo. En producción se debe validar y configurar la asignación definitiva a Alex antes de publicar.</div><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveLoan()">Crear préstamo</button></div>`;modal.classList.add('show');
  // Recuperar el formulario original después de recargar la pestaña.
  // No borrar ni alterar el identificador de operación pendiente.
  const saved=readPendingLoan();
@@ -1326,6 +1326,7 @@ function openNewLoan(){const sheet=document.getElementById('sheet');sheet.innerH
     if(el && value!==undefined && value!==null)el.value=String(value);
    }
    calcNew();
+   updateExistingLoanClient();
    const note=document.createElement('p');
    note.className='role-note';
    note.textContent='Operación pendiente recuperada. Verifique los datos y pulse Crear préstamo para confirmar o reintentar la misma solicitud. No cambie los datos antes de confirmar.';
@@ -1336,6 +1337,19 @@ function openNewLoan(){const sheet=document.getElementById('sheet');sheet.innerH
    sheet.prepend(note);
   }
  }
+ updateExistingLoanClient();
+}
+function updateExistingLoanClient(){
+ const select=document.getElementById('existingClient');
+ const fields=document.getElementById('newLoanClientFields');
+ const info=document.getElementById('existingLoanClientInfo');
+ if(!select||!fields||!info)return;
+ const c=clients.find(x=>x.id===select.value);
+ fields.style.display=c?'none':'block';
+ info.style.display=c?'block':'none';
+ if(!c){info.innerHTML='';return}
+ const esc=v=>String(v??'').replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+ info.innerHTML='<b>Cliente existente #'+esc(c.client_number||'—')+' · '+esc(clientDisplayName(c))+'</b><div class="sub" style="margin-top:6px">Se conservarán sus datos y su historial. No necesita registrarlo nuevamente.</div><div style="margin-top:8px">Identificación: '+esc(c.identification||'No registrada')+'</div><div>Teléfono: '+esc(c.phone||'No registrado')+'</div><div>Dirección: '+esc(c.address||'No registrada')+'</div>';
 }
 function readPendingLoan(){
  try{
