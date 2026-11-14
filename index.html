@@ -438,8 +438,8 @@ function isSundayISO(iso){if(!iso)return false;const [y,m,d]=iso.slice(0,10).spl
 function creditTodayISO(){const t=todayISO();if(!isSundayISO(t))return t;const [y,m,d]=t.split('-').map(Number),x=new Date(Date.UTC(y,m-1,d-1));return x.toISOString().slice(0,10)}
 function addEffectiveDays(start,days){const [y,m,d]=String(start).slice(0,10).split('-').map(Number),x=new Date(Date.UTC(y,m-1,d));let left=Number(days||0);while(left>0){x.setUTCDate(x.getUTCDate()+1);if(x.getUTCDay()!==0)left--}return x.toISOString().slice(0,10)}
 function loanTermDays(l){return Number(l?.effective_term_days||l?.term_days||24)}
-function termLabel(l){const days=loanTermDays(l);return l?.credit_term_code?'Plazo '+days+' días efectivos (sin domingos)':'Plazo histórico '+days+' días'}
-function scheduledTodayForLoan(l){if(isSundayISO(todayISO()))return 0;return Math.min(Number(l.expected_payment||0),balanceForLoan(l.id)+paidTodayForLoan(l.id))}
+function termLabel(l){const days=loanTermDays(l);return String(l.collection_frequency||'').startsWith('weekly:')?'4 pagos semanales · '+['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'][Number(l.collection_frequency.split(':')[1])] :l?.credit_term_code?'Plazo '+days+' días efectivos (sin domingos)':'Plazo histórico '+days+' días'}
+function scheduledTodayForLoan(l){const freq=String(l.collection_frequency||'daily');if(freq.startsWith('weekly:')){const weekday=Number(freq.split(':')[1]);if(!weeklyDatesAfter(String(l.start_date).slice(0,10),weekday).includes(todayISO()))return 0;}if(isSundayISO(todayISO()))return 0;return Math.min(Number(l.expected_payment||0),balanceForLoan(l.id)+paidTodayForLoan(l.id))}
 function pendingTodayForLoan(l){return Math.max(0,scheduledTodayForLoan(l)-paidTodayForLoan(l.id))}
 function pendingTodayLoans(){return todayLoans().filter(l=>pendingTodayForLoan(l)>0)}
 function localISOOffset(days){const [y,m,d]=todayISO().split('-').map(Number);return new Date(Date.UTC(y,m-1,d+days)).toISOString().slice(0,10)}
@@ -645,7 +645,7 @@ function clientCollectionHistory(ls,ps){
     const due=String(l.due_date||'').slice(0,10);
     let effectiveDays=0;for(let dd=addCalendarDaysISO(first,1);dd<=day;dd=addCalendarDaysISO(dd,1)){if(!isSundayISO(dd))effectiveDays++;}
     const frequency=l.collection_frequency||'daily';
-    const scheduled=frequency==='daily'||(frequency==='weekly'&&effectiveDays>0&&effectiveDays%7===0);
+    const scheduled=frequency==='daily'||(frequency.startsWith('weekly:')&&weeklyDatesAfter(first,Number(frequency.split(':')[1])).includes(day))||(frequency==='weekly'&&effectiveDays>0&&effectiveDays%7===0);
     if(paid>0){entries.push({day,paid,loan:l});}
     else if(scheduled&&day<today&&(!due||day<=due)&&prior<amountDue-0.001){entries.push({day,missed:true,loan:l});}
    }
@@ -1333,7 +1333,7 @@ async function savePhysicalCardImport(){
 }
 
 let pendingLoanRequest=null;
-function openNewLoan(){const sheet=document.getElementById('sheet');sheet.innerHTML=`<h3>Nuevo préstamo</h3><label>Cliente</label><input id="existingClientSearch" placeholder="Buscar por nombre, número, apodo, cédula o teléfono" oninput="filterExistingLoanClients()" autocomplete="off"><select id="existingClient" onchange="updateExistingLoanClient()"><option value="">＋ Cliente nuevo</option>${clients.map(c=>`<option value="${c.id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select><div id="existingLoanClientInfo" class="card" style="display:none;margin-top:10px"></div><div id="newLoanClientFields"><label>Nombre del cliente nuevo</label><input id="newName" placeholder="Nombre completo"><label>Identificación (opcional)</label><input id="newIdentification" placeholder="Cédula / identificación"><label>Teléfono (opcional)</label><input id="newPhone" placeholder="8888-8888"><label>Dirección / referencia (opcional)</label><textarea id="newAddress" rows="2" placeholder="Dirección o punto de referencia"></textarea><label>Notas del cliente (opcional)</label><textarea id="newClientNotes" rows="2" placeholder="Información útil"></textarea></div><label>Monto entregado</label><input id="newPrincipal" type="number" placeholder="100000" oninput="calcNew()"><div class="row"><div><label>Interés</label><input value="20%" disabled></div><div><label>Total a cobrar</label><input id="newTotal" disabled></div></div><label>Modalidad / plazo del crédito</label><select id="newTerm"><option value="weekly">Semanal · 7 días efectivos</option><option value="fortnightly">Quincenal · 15 días efectivos</option><option value="days_24" selected>24 días efectivos</option><option value="days_30">30 días efectivos</option></select><div class="role-note">Los domingos no consumen días del plazo ni adelantan el vencimiento.</div><label>Frecuencia de cobro</label><select id="newFreq"><option value="daily">Diario</option><option value="weekly">Semanal</option><option value="custom">Personalizado</option></select><label>Monto esperado por cobro</label><input id="newPayment" type="number" placeholder="5000"><label>Cobrador asignado (solo TEST)</label><select id="newCollector">${collectors.filter(c=>c.active).map(c=>`<option value="${c.user_id}">${c.full_name}</option>`).join('')}</select><div class="role-note">Modo de pruebas: elija un cobrador activo. En producción se debe validar y configurar la asignación definitiva a Alex antes de publicar.</div><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveLoan()">Crear préstamo</button></div>`;modal.classList.add('show');
+function openNewLoan(){const sheet=document.getElementById('sheet');sheet.innerHTML=`<h3>Nuevo préstamo</h3><label>Cliente</label><input id="existingClientSearch" placeholder="Buscar por nombre, número, apodo, cédula o teléfono" oninput="filterExistingLoanClients()" autocomplete="off"><select id="existingClient" onchange="updateExistingLoanClient()"><option value="">＋ Cliente nuevo</option>${clients.map(c=>`<option value="${c.id}">${clientDisplayName(c)}${c.nickname?` (${c.nickname})`:''}</option>`).join('')}</select><div id="existingLoanClientInfo" class="card" style="display:none;margin-top:10px"></div><div id="newLoanClientFields"><label>Nombre del cliente nuevo</label><input id="newName" placeholder="Nombre completo"><label>Identificación (opcional)</label><input id="newIdentification" placeholder="Cédula / identificación"><label>Teléfono (opcional)</label><input id="newPhone" placeholder="8888-8888"><label>Dirección / referencia (opcional)</label><textarea id="newAddress" rows="2" placeholder="Dirección o punto de referencia"></textarea><label>Notas del cliente (opcional)</label><textarea id="newClientNotes" rows="2" placeholder="Información útil"></textarea></div><label>Monto entregado</label><input id="newPrincipal" type="number" placeholder="100000" oninput="calcNew()"><div class="row"><div><label>Interés</label><input value="20%" disabled></div><div><label>Total a cobrar</label><input id="newTotal" disabled></div></div><label>Modalidad / plazo del crédito</label><select id="newTerm" onchange="updateNewLoanSchedule()"><option value="days_24" selected>24 días · pago diario (sin domingos)</option><option value="days_30">30 días · pago diario (sin domingos)</option><option value="weekly_30">30 días · 4 pagos semanales</option></select><div class="role-note">Los domingos no consumen días del plazo ni adelantan el vencimiento.</div><div id="weeklyDayBox" style="display:none"><label>Día fijo de pago semanal</label><select id="weeklyDay" onchange="updateNewLoanSchedule()"><option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option><option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option></select><div class="role-note">Serán exactamente cuatro pagos en el día elegido, empezando el próximo día correspondiente.</div></div><label>Monto esperado por cobro</label><input id="newPayment" type="number" placeholder="5000"><label>Cobrador asignado (solo TEST)</label><select id="newCollector">${collectors.filter(c=>c.active).map(c=>`<option value="${c.user_id}">${c.full_name}</option>`).join('')}</select><div class="role-note">Modo de pruebas: elija un cobrador activo. En producción se debe validar y configurar la asignación definitiva a Alex antes de publicar.</div><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveLoan()">Crear préstamo</button></div>`;modal.classList.add('show');
  // Recuperar el formulario original después de recargar la pestaña.
  // No borrar ni alterar el identificador de operación pendiente.
  const saved=readPendingLoan();
@@ -1344,12 +1344,13 @@ function openNewLoan(){const sheet=document.getElementById('sheet');sheet.innerH
    const values={existingClient:d.clientIdSelected||'',newName:d.name||'',
     newIdentification:d.identification||'',newPhone:d.phone||'',
     newAddress:d.address||'',newClientNotes:d.notes||'',
-    newPrincipal:d.p,newTerm:d.termCode,newFreq:d.frequency,newPayment:d.pay,newCollector:d.collectorId};
+    newPrincipal:d.p,newTerm:d.termCode,weeklyDay:String(d.frequency||'').split(':')[1]||'1',newPayment:d.pay,newCollector:d.collectorId};
    for(const [id,value] of Object.entries(values)){
     const el=document.getElementById(id);
     if(el && value!==undefined && value!==null)el.value=String(value);
    }
    calcNew();
+   updateNewLoanSchedule();
    updateExistingLoanClient();
    const note=document.createElement('p');
    note.className='role-note';
@@ -1412,16 +1413,29 @@ function readPendingLoan(){
   return obj;
  }catch(e){return null}
 }
-function calcNew(){newTotal.value=money(Number(newPrincipal.value||0)*1.2)}
+function weeklyDatesAfter(start,weekday){
+ const dates=[];let day=start;
+ for(let i=0;i<35&&dates.length<4;i++){day=addCalendarDaysISO(day,1);const [y,m,d]=day.split('-').map(Number);if(new Date(Date.UTC(y,m-1,d)).getUTCDay()===Number(weekday))dates.push(day)}
+ return dates;
+}
+function updateNewLoanSchedule(){
+ const weekly=document.getElementById('newTerm')?.value==='weekly_30';
+ const box=document.getElementById('weeklyDayBox');if(box)box.style.display=weekly?'block':'none';
+ const payment=document.getElementById('newPayment'),principal=document.getElementById('newPrincipal');
+ if(payment&&principal&&Number(principal.value)>0){const total=Number(principal.value)*1.2;payment.placeholder=weekly?'4 cuotas de '+money(total/4):'Monto diario';}
+}
+function calcNew(){newTotal.value=money(Number(newPrincipal.value||0)*1.2);updateNewLoanSchedule()}
 async function saveLoan(){
  if(window._loanSaveBusy)return;
  const p=Number(newPrincipal.value),pay=Number(newPayment.value),clientIdSelected=existingClient.value;
- const terms={weekly:7,fortnightly:15,days_24:24,days_30:30},termCode=newTerm.value,termDays=terms[termCode];
+ const terms={days_24:24,days_30:30,weekly_30:30},termCode=newTerm.value,termDays=terms[termCode];
+ const weeklyDay=termCode==='weekly_30'?document.getElementById('weeklyDay')?.value:null;
+ const frequency=weeklyDay?'weekly:'+weeklyDay:'daily';
  // Reintentar con las fechas originales aunque haya cambiado el día.
  const recovered=readPendingLoan();
  let recoveredDetails=null;
  if(recovered){try{recoveredDetails=JSON.parse(recovered.fingerprint)}catch(e){}}
- const startDate=recoveredDetails?.startDate||todayISO(),dueDate=addEffectiveDays(startDate,termDays);
+ const startDate=recoveredDetails?.startDate||todayISO(),dueDate=weeklyDay?weeklyDatesAfter(startDate,weeklyDay)[3]:addEffectiveDays(startDate,termDays);
  if(!Number.isFinite(p)||p<=0||!Number.isFinite(pay)||pay<=0||!termDays){alert('Complete monto, plazo y cobro esperado.');return}
  if(!collectors.some(c=>c.user_id===newCollector.value && c.active)){alert('Seleccione un cobrador activo de pruebas antes de crear el préstamo.');return}
  const existing=clients.find(c=>c.id===clientIdSelected);
@@ -1440,7 +1454,7 @@ async function saveLoan(){
  }
  const mm=morosoMatch(existing?.full_name||newName.value,existing?.phone||newPhone.value);
  if(mm){alert('⚠️ CLIENTE MOROSO\n\n'+mm.full_name+' mantiene una deuda morosa de '+money(mm.opening_balance)+'.\n\nIker debe revisar y autorizar un acuerdo especial.');return}
- const details={p, pay,clientIdSelected,collectorId:newCollector.value,termCode,termDays,startDate,dueDate,frequency:newFreq.value,
+ const details={p, pay,clientIdSelected,collectorId:newCollector.value,termCode,termDays,startDate,dueDate,frequency,
   name:newName.value.trim(),identification:newIdentification.value.trim(),phone:newPhone.value.trim(),
   address:newAddress.value.trim(),notes:newClientNotes.value.trim()};
  const fingerprint=JSON.stringify(details);
