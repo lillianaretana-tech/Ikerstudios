@@ -1034,9 +1034,12 @@ function shareCreditStatement(id){
  const paid=ps.reduce((n,p)=>n+Number(p.amount||0),0);
  const entries=clientCollectionHistory([l],ps);
  const lines=['ESTADO DE CUENTA - CARTERA 24','Cliente: '+clientDisplayName(c),'Crédito #'+loanShortCode(l),'Inicio: '+fmtDate(l.start_date),'Vencimiento: '+fmtDate((activeCycleForLoan(id)||cycles.filter(x=>x.loan_id===id).sort((a,b)=>Number(b.cycle_number)-Number(a.cycle_number))[0])?.due_date||l.due_date),'Monto prestado: '+money(l.principal),'Total del crédito: '+money(due),'Total abonado: '+money(paid),'Saldo pendiente: '+money(Math.max(0,due-paid)),'','HISTORIAL DE COBROS',...entries.map(e=>weekdayDate(e.day)+' - '+(e.missed?'No registró pago':money(e.paid)))];
- const url='https://wa.me/?text='+encodeURIComponent(lines.join(String.fromCharCode(10)));
- const w=window.open(url,'_blank','noopener,noreferrer');
- if(!w)window.location.href=url;
+ const message=lines.join(String.fromCharCode(10));
+ const escapeHtml=v=>String(v).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+ sheet.innerHTML='<h3>Revisar estado de cuenta</h3><div class="sub">Verifique los datos antes de abrir WhatsApp. No se enviará nada sin su confirmación.</div><div class="card" style="margin-top:12px"><pre style="font:14px/1.65 system-ui,Arial;white-space:pre-wrap;overflow-wrap:anywhere;margin:0">'+escapeHtml(message)+'</pre></div><div class="actions"><button class="primary" id="confirmStatementShare">Confirmar y abrir WhatsApp</button><button class="secondary" onclick="openLoanHistory(\''+id+'\')">Volver</button></div>';
+ const btn=document.getElementById('confirmStatementShare');
+ btn.onclick=()=>{const url='https://wa.me/?text='+encodeURIComponent(message);const w=window.open(url,'_blank','noopener,noreferrer');if(!w)window.location.href=url;};
+ modal.classList.add('show');
 }
 function openLoanHistory(id){
  const l=loans.find(x=>x.id===id),c=clientFor(l.client_id),list=cycles.filter(x=>x.loan_id===id).sort((a,b)=>Number(a.cycle_number)-Number(b.cycle_number));
