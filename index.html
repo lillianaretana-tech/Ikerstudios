@@ -1379,7 +1379,8 @@ function updateExistingLoanClient(){
  fields.style.display=c?'none':'block';info.style.display=c?'block':'none';
  if(!c){info.innerHTML='';return}
  const esc=v=>String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
- const pending=loans.filter(l=>l.client_id===c.id&&['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0);\n info.innerHTML=(pending.length?'<div style="color:#b42318;font-weight:700">⚠️ Saldo anterior pendiente: '+money(pending.reduce((n,l)=>n+balanceForLoan(l.id),0))+' · No se permite crear otro crédito hasta regularizarlo.</div>':'')+'<b>Cliente #'+esc(c.client_number)+' · Datos personales editables</b>'<div class="sub">Conserva su número e historial.</div>'+
+ const pending=loans.filter(l=>l.client_id===c.id&&['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0);
+ info.innerHTML=(pending.length?'<div style="color:#b42318;font-weight:700">⚠️ Saldo anterior pendiente: '+money(pending.reduce((n,l)=>n+balanceForLoan(l.id),0))+' · No se permite crear otro crédito hasta regularizarlo.</div>':'')+'<b>Cliente #'+esc(c.client_number)+' · Datos personales editables</b><div class="sub">Conserva su número e historial.</div>'+
  '<label>Nombre</label><input id="reuseName" value="'+esc(c.full_name)+'">'+
  '<label>Identificación</label><input id="reuseId" value="'+esc(c.identification)+'">'+
  '<label>Teléfono</label><input id="reusePhone" value="'+esc(c.phone)+'">'+
