@@ -1340,16 +1340,31 @@ function openNewLoan(){const sheet=document.getElementById('sheet');sheet.innerH
  updateExistingLoanClient();
 }
 function updateExistingLoanClient(){
- const select=document.getElementById('existingClient');
- const fields=document.getElementById('newLoanClientFields');
- const info=document.getElementById('existingLoanClientInfo');
- if(!select||!fields||!info)return;
- const c=clients.find(x=>x.id===select.value);
- fields.style.display=c?'none':'block';
- info.style.display=c?'block':'none';
+ const sel=document.getElementById('existingClient'),fields=document.getElementById('newLoanClientFields'),info=document.getElementById('existingLoanClientInfo');
+ if(!sel||!fields||!info)return;
+ const c=clients.find(x=>x.id===sel.value);
+ fields.style.display=c?'none':'block';info.style.display=c?'block':'none';
  if(!c){info.innerHTML='';return}
- const esc=v=>String(v??'').replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
- info.innerHTML='<b>Cliente existente #'+esc(c.client_number||'—')+' · '+esc(clientDisplayName(c))+'</b><div class="sub" style="margin-top:6px">Se conservarán sus datos y su historial. No necesita registrarlo nuevamente.</div><div style="margin-top:8px">Identificación: '+esc(c.identification||'No registrada')+'</div><div>Teléfono: '+esc(c.phone||'No registrado')+'</div><div>Dirección: '+esc(c.address||'No registrada')+'</div>';
+ const esc=v=>String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+ info.innerHTML='<b>Cliente #'+esc(c.client_number)+' · Datos personales editables</b><div class="sub">Conserva su número e historial.</div>'+
+ '<label>Nombre</label><input id="reuseName" value="'+esc(c.full_name)+'">'+
+ '<label>Identificación</label><input id="reuseId" value="'+esc(c.identification)+'">'+
+ '<label>Teléfono</label><input id="reusePhone" value="'+esc(c.phone)+'">'+
+ '<label>Dirección</label><textarea id="reuseAddress" rows="2">'+esc(c.address)+'</textarea>'+
+ '<label>Notas</label><textarea id="reuseNotes" rows="2">'+esc(c.notes)+'</textarea>'+
+ '<button class="secondary" id="reuseSave" onclick="saveExistingLoanClient()">Guardar datos personales</button><div class="sub" id="reuseStatus">Guarde los cambios antes de crear el préstamo.</div>';
+}
+async function saveExistingLoanClient(){
+ const id=document.getElementById('existingClient').value,c=clients.find(x=>x.id===id);if(!c)return;
+ if(readPendingLoan()){alert('Verifique primero el préstamo pendiente antes de editar los datos.');return}
+ const name=document.getElementById('reuseName').value.trim();
+ if(!name){alert('Indique el nombre del cliente.');return}
+ const payload={full_name:name,first_name:name,last_name:null,identification:document.getElementById('reuseId').value.trim()||null,phone:document.getElementById('reusePhone').value.trim()||null,address:document.getElementById('reuseAddress').value.trim()||null,notes:document.getElementById('reuseNotes').value.trim()||null};
+ const btn=document.getElementById('reuseSave');btn.disabled=true;
+ const {data,error}=await sb.from('loans_clients').update(payload).eq('id',id).select('id,full_name,first_name,last_name,identification,phone,address,notes').single();
+ btn.disabled=false;
+ if(error){alert('No se guardó: '+error.message);return}
+ Object.assign(c,data);document.getElementById('reuseStatus').textContent='✓ Datos actualizados. Puede crear el préstamo.';
 }
 function readPendingLoan(){
  try{
