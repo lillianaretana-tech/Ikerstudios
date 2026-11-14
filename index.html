@@ -1379,7 +1379,7 @@ function updateExistingLoanClient(){
  fields.style.display=c?'none':'block';info.style.display=c?'block':'none';
  if(!c){info.innerHTML='';return}
  const esc=v=>String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
- info.innerHTML='<b>Cliente #'+esc(c.client_number)+' · Datos personales editables</b><div class="sub">Conserva su número e historial.</div>'+
+ const pending=loans.filter(l=>l.client_id===c.id&&['active','refinanced'].includes(l.status)&&balanceForLoan(l.id)>0);\n info.innerHTML=(pending.length?'<div style="color:#b42318;font-weight:700">⚠️ Saldo anterior pendiente: '+money(pending.reduce((n,l)=>n+balanceForLoan(l.id),0))+' · No se permite crear otro crédito hasta regularizarlo.</div>':'')+'<b>Cliente #'+esc(c.client_number)+' · Datos personales editables</b>'<div class="sub">Conserva su número e historial.</div>'+
  '<label>Nombre</label><input id="reuseName" value="'+esc(c.full_name)+'">'+
  '<label>Identificación</label><input id="reuseId" value="'+esc(c.identification)+'">'+
  '<label>Teléfono</label><input id="reusePhone" value="'+esc(c.phone)+'">'+
@@ -1421,6 +1421,19 @@ async function saveLoan(){
  if(!Number.isFinite(p)||p<=0||!Number.isFinite(pay)||pay<=0||!termDays){alert('Complete monto, plazo y cobro esperado.');return}
  if(!collectors.some(c=>c.user_id===newCollector.value && c.active)){alert('Seleccione un cobrador activo de pruebas antes de crear el préstamo.');return}
  const existing=clients.find(c=>c.id===clientIdSelected);
+ if(existing){
+  const {data:priorLoans,error:priorError}=await sb.from('loans_loans').select('id,start_date,status').eq('client_id',existing.id);
+  if(priorError){alert('No se pudo verificar los saldos anteriores. No se creará el préstamo.');return}
+  const ids=(priorLoans||[]).map(x=>x.id);
+  let outstanding=[];
+  if(ids.length){
+   const {data:oldCycles,error:cycleError}=await sb.from('loans_cycles').select('loan_id,amount_due').in('loan_id',ids);
+   const {data:oldPayments,error:paymentError}=await sb.from('loans_payments').select('loan_id,amount').in('loan_id',ids);
+   if(cycleError||paymentError){alert('No se pudo verificar el historial financiero. Operación detenida.');return}
+   outstanding=(priorLoans||[]).filter(l=>['active','refinanced'].includes(l.status)).map(l=>({l,balance:(oldCycles||[]).filter(c=>c.loan_id===l.id).reduce((n,c)=>n+Number(c.amount_due||0),0)-(oldPayments||[]).filter(p=>p.loan_id===l.id).reduce((n,p)=>n+Number(p.amount||0),0)})).filter(x=>x.balance>0.001);
+  }
+  if(outstanding.length){alert('⚠️ CRÉDITO ANTERIOR PENDIENTE\\n\\n'+clientDisplayName(existing)+' tiene '+outstanding.length+' crédito(s) con saldo pendiente:\\n'+outstanding.map(x=>fmtDate(x.l.start_date)+' · '+money(x.balance)).join('\\n')+'\\n\\nDebe liquidar o regularizar el saldo anterior antes de crear un préstamo nuevo.');return}
+ }
  const mm=morosoMatch(existing?.full_name||newName.value,existing?.phone||newPhone.value);
  if(mm){alert('⚠️ CLIENTE MOROSO\n\n'+mm.full_name+' mantiene una deuda morosa de '+money(mm.opening_balance)+'.\n\nIker debe revisar y autorizar un acuerdo especial.');return}
  const details={p, pay,clientIdSelected,collectorId:newCollector.value,termCode,termDays,startDate,dueDate,frequency:newFreq.value,
