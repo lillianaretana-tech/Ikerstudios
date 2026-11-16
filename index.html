@@ -1426,7 +1426,9 @@ function updateNewLoanSchedule(){
 }
 function calcNew(){newTotal.value=money(Number(newPrincipal.value||0)*1.2);updateNewLoanSchedule()}
 async function saveLoan(){
- if(window._loanSaveBusy)return;
+ if(window._loanSaveBusy || window._loanSavePreflightBusy)return;
+ window._loanSavePreflightBusy=true;
+ try{
  const p=Number(newPrincipal.value),pay=Number(newPayment.value),clientIdSelected=existingClient.value;
  const terms={days_24:24,days_30:30,weekly_30:30},termCode=newTerm.value,termDays=terms[termCode];
  const weeklyDay=termCode==='weekly_30'?new Date(Date.UTC(...todayISO().split('-').map((v,i)=>i===1?Number(v)-1:Number(v)))).getUTCDay():null;
@@ -1468,6 +1470,7 @@ async function saveLoan(){
  if(!pendingLoanRequest){pendingLoanRequest={id:crypto.randomUUID(),fingerprint,clientId:clientIdSelected||null};
   try{sessionStorage.setItem(storageKey,JSON.stringify(pendingLoanRequest))}catch(e){pendingLoanRequest=null;alert('No se pudo guardar la referencia de seguridad. No se envió el préstamo.');return}
  }
+ }finally{window._loanSavePreflightBusy=false;}
  window._loanSaveBusy=true;setLoading(true);
  try{
   let clientId=pendingLoanRequest.clientId;
