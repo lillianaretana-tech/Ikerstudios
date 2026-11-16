@@ -1080,11 +1080,12 @@ function openLoanHistory(id){
  modal.classList.add('show');
 }
 async function confirmRefinance(id){
+ if(window._refiBusy)return;
  const l=loans.find(x=>x.id===id),c=clientFor(l.client_id),cy=activeCycleForLoan(id);
   if(!cy||!isCycleDue(cy)){alert('Este crédito todavía no está listo para refinanciar.');return}
  const rem=cycleRemaining(cy),next=Math.round(rem*1.20*100)/100;
   if(!confirm(`¿Refinanciar el saldo de ${money(rem)} de ${c.full_name}?\n\nNuevo ciclo: ${money(next)}\nInterés: 20%\n${termLabel(l)}`))return;
- if(window._refiBusy)return;window._refiBusy=true;setLoading(true);
+ window._refiBusy=true;setLoading(true);
  let error;try{({error}=await sb.rpc('loans_refinance_cycle',{p_loan_id:id}))}catch(e){error={message:String(e&&e.message||e)}}
  window._refiBusy=false;setLoading(false);
  if(error){alert('No se pudo refinanciar: '+error.message+'\nRevise el crédito antes de repetir.');await loadAll();return}
