@@ -1100,8 +1100,23 @@ function openPay(id){
  const suggested=pendingTodayForLoan(l);
   sheet.innerHTML=`<h3>Registrar cobro</h3><div class="sub"><b>${clientDisplayName(c)}</b> · saldo actual ${money(bal)}</div>${overdue?`<div class="overdue-alert">⚠ CRÉDITO VENCIDO<br><span style="font-size:12px;font-weight:700">Venció el ${fmtDate(cy.due_date)} · ${termLabel(l)}</span></div>`:''}${migrated?`<div class="role-note">Tarjeta migrada · cuota pactada de hoy: <b>${money(scheduledTodayForLoan(l))}</b>. Puede registrar el monto realmente recibido.</div>`:''}<label>Monto recibido</label><input id="payAmount" type="number" min="1" max="${bal}" value="${suggested||''}" placeholder="Monto recibido"><label>Forma de pago</label><select id="payMethod"><option value="cash">Efectivo</option><option value="sinpe">SINPE</option></select><div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="confirmQuickPay('${id}')">Continuar</button></div>`;modal.classList.add('show')
 }
-async function confirmQuickPay(id){const l=loans.find(x=>x.id===id),c=clientFor(l.client_id),cy=activeCycleForLoan(id),overdue=cy&&isCycleOverdue(cy),bal0=balanceForLoan(id),a=Number(payAmount.value),method=payMethod.value;if(!a||a<=0){alert('Revise el monto recibido.');return}let bal=bal0;try{const st=await sb.rpc('loans_get_loan_state',{p_loan_id:id});const r0=Array.isArray(st.data)?st.data[0]:st.data;if(!st.error&&r0&&isFinite(Number(r0.balance))){bal=Number(r0.balance);if(Math.abs(bal-bal0)>0.009)alert('El saldo cambió en el servidor: ahora es '+money(bal)+'.')}}catch(e){}if(a>bal){alert('El monto supera el saldo actual ('+money(bal)+').');return}sheet.innerHTML=`<h3>Confirmar pago</h3>${overdue?'<div class="overdue-alert">⚠ CRÉDITO VENCIDO</div>':''}<div class="card"><div class="receipt-line"><span>Cliente</span><b>${clientDisplayName(c)}</b></div><div class="receipt-line"><span>Saldo actual</span><b>${money(bal)}</b></div><div class="receipt-line"><span>Recibe</span><b>${money(a)}</b></div><div class="receipt-line"><span>Nuevo saldo</span><b>${money(bal-a)}</b></div><div class="receipt-line"><span>Forma</span><b>${method==='sinpe'?'SINPE':'Efectivo'}</b></div></div><div class="actions"><button class="secondary" onclick="openPay('${id}')">Atrás</button><button class="primary" onclick="payConfirmed('${id}',${a},'${method}')">Registrar pago</button></div>`}
-async function payConfirmed(id,a,method){window._quickPay={amount:a,method};await pay(id)}
+async function confirmQuickPay(id){const l=loans.find(x=>x.id===id),c=clientFor(l.client_id),cy=activeCycleForLoan(id),overdue=cy&&isCycleOverdue(cy),bal0=balanceForLoan(id),a=Number(payAmount.value),method=payMethod.value;if(!a||a<=0){alert('Revise el monto recibido.');return}let bal=bal0;try{const st=await sb.rpc('loans_get_loan_state',{p_loan_id:id});const r0=Array.isArray(st.data)?st.data[0]:st.data;if(!st.error&&r0&&isFinite(Number(r0.balance))){bal=Number(r0.balance);if(Math.abs(bal-bal0)>0.009)alert('El saldo cambió en el servidor: ahora es '+money(bal)+'.')}}catch(e){}if(a>bal){alert('El monto supera el saldo actual ('+money(bal)+').');return}sheet.innerHTML=`<h3>Confirmar pago</h3>${overdue?'<div class="overdue-alert">⚠ CRÉDITO VENCIDO</div>':''}<div class="card"><div class="receipt-line"><span>Cliente</span><b>${clientDisplayName(c)}</b></div><div class="receipt-line"><span>Saldo actual</span><b>${money(bal)}</b></div><div class="receipt-line"><span>Recibe</span><b>${money(a)}</b></div><div class="receipt-line"><span>Nuevo saldo</span><b>${money(bal-a)}</b></div><div class="receipt-line"><span>Forma</span><b>${method==='sinpe'?'SINPE':'Efectivo'}</b></div></div><div class="actions"><button class="secondary" onclick="closeModal()">No, cancelar</button><button class="primary" id="confirmPaymentYes" onclick="payConfirmed('${id}',${a},'${method}')">Sí, registrar pago</button></div>`}
+async function payConfirmed(id,a,method){
+ // TEST validado: bloquear pulsaciones repetidas mientras se procesa el cobro.
+ if(window._paymentConfirmationLocked || window._payBusy)return;
+ if(!window.confirm('¿Está seguro de registrar este pago de '+money(a)+'?\n\nSí: registrar pago.\nCancelar: no registrar nada.'))return;
+ window._paymentConfirmationLocked=true;
+ const btn=document.getElementById('confirmPaymentYes');
+ if(btn){btn.disabled=true;btn.textContent='Registrando pago…'}
+ window._quickPay={amount:a,method};
+ try{await pay(id)}
+ finally{
+  // Un reintento tras error de red conserva la referencia de operación original.
+  const stillThere=document.getElementById('confirmPaymentYes');
+  if(stillThere){stillThere.disabled=false;stillThere.textContent='Sí, registrar pago'}
+  window._paymentConfirmationLocked=false;
+ }
+}
 
 
 function receiptNumber(p){return 'C24-'+String(p.payment_date||todayISO()).slice(0,10).replaceAll('-','')+'-'+String(p.id||'').replaceAll('-','').slice(0,6).toUpperCase()}
